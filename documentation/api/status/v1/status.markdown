@@ -4,7 +4,7 @@ layout: default
 canonical: "/puppetdb/latest/api/status/v1/status.html"
 ---
 
-[curl]: ../curl.html#using-curl-from-localhost-non-sslhttp
+[curl]: ../curl.markdown#using-curl-from-localhost-non-sslhttp
 [status-api]: {{pe}}/status_api.html
 
 The `/status` endpoint implements the Puppet Labs Status API for coordinated

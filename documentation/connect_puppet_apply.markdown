@@ -13,8 +13,8 @@ canonical: "/puppetdb/latest/connect_puppet_apply.html"
 [puppetdb_conf]: {{puppet}}/config_file_puppetdb.html
 [routes_yaml]: {{puppet}}/config_file_routes.html
 [exported]: {{puppet}}/lang_exported.html
-[jetty]: ./configure.html#jetty-http-settings
-[ssl_script]: ./maintain_and_tune.html#redo-ssl-setup-after-changing-certificates
+[jetty]: ./configure.markdown#jetty-http-settings
+[ssl_script]: ./maintain_and_tune.markdown#redo-ssl-setup-after-changing-certificates
 [settings_namespace]: {{puppet}}/lang_facts_and_builtin_vars.html#puppet-master-variables
 [package_repos]: {{puppet}}/puppet_collections.html
 

@@ -4,7 +4,7 @@ layout: default
 canonical: "/puppetdb/latest/api/metrics/v1/index.html"
 ---
 
-[curl]: ../curl.html#using-curl-from-localhost-non-sslhttp
+[curl]: ../curl.markdown#using-curl-from-localhost-non-sslhttp
 
 Querying PuppetDB metrics is accomplished by making an HTTP request
 to paths under the `/metrics/v1` REST endpoint.

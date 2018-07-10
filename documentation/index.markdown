@@ -4,15 +4,15 @@ layout: default
 ---
 
 [exported]: {{puppet}}/lang_exported.html
-[connect]: ./connect_puppet_master.html
-[apply]: ./connect_puppet_apply.html
-[install_via_module]: ./install_via_module.html
-[install_from_packages]: ./install_from_packages.html
-[install_advanced]: ./install_from_source.html
-[scaling]: ./scaling_recommendations.html
+[connect]: ./connect_puppet_master.markdown
+[apply]: ./connect_puppet_apply.markdown
+[install_via_module]: ./install_via_module.markdown
+[install_from_packages]: ./install_from_packages.markdown
+[install_advanced]: ./install_from_source.markdown
+[scaling]: ./scaling_recommendations.markdown
 [facts]: {{puppet}}/lang_facts_and_builtin_vars.html
 [catalog]: {{puppet}}/lang_summary.html#compilation-and-catalogs
-[releasenotes]: ./release_notes.html
+[releasenotes]: ./release_notes.markdown
 [github]: https://github.com/puppetlabs/puppetdb
 [tracker]: https://tickets.puppetlabs.com/browse/PDB
 [apt_pgdg]: https://apt.postgresql.org

@@ -4,14 +4,14 @@ layout: default
 ---
 
 
-[dashboard]: ./maintain_and_tune.html#monitor-the-performance-dashboard
-[connect_master]: ./connect_puppet_master.html
-[connect_apply]: ./connect_puppet_apply.html
+[dashboard]: ./maintain_and_tune.markdown#monitor-the-performance-dashboard
+[connect_master]: ./connect_puppet_master.markdown
+[connect_apply]: ./connect_puppet_apply.markdown
 [tracker]: https://tickets.puppetlabs.com/browse/PDB
-[start_source]: ./install_from_source.html#step-4-start-the-puppetdb-service
-[plugin_source]: ./connect_puppet_master.html#on-platforms-without-packages
-[module]: ./install_via_module.html
-[puppetdb3]: /puppetdb/3.2/migrate.html
+[start_source]: ./install_from_source.markdown#step-4-start-the-puppetdb-service
+[plugin_source]: ./connect_puppet_master.markdown#on-platforms-without-packages
+[module]: ./install_via_module.markdown
+[puppetdb3]: /puppetdb/3.2/migrate.markdown
 
 Checking for updates
 -----

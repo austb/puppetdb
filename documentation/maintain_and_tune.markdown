@@ -4,15 +4,15 @@ layout: default
 canonical: "/puppetdb/latest/maintain_and_tune.html"
 ---
 
-[configure_jetty]: ./configure.html#jetty-http-settings
-[configure_heap]: ./configure.html#configuring-the-java-heap-size
-[threads]: ./configure.html#command-processing-settings
-[memrec]: ./scaling_recommendations.html#bottleneck-java-heap-size
-[puppetdb_report_processor]: ./connect_puppet_master.html#enabling-report-storage
-[node_ttl]: ./configure.html#node-ttl
-[report_ttl]: ./configure.html#report-ttl
+[configure_jetty]: ./configure.markdown#jetty-http-settings
+[configure_heap]: ./configure.markdown#configuring-the-java-heap-size
+[threads]: ./configure.markdown#command-processing-settings
+[memrec]: ./scaling_recommendations.markdown#bottleneck-java-heap-size
+[puppetdb_report_processor]: ./connect_puppet_master.markdown#enabling-report-storage
+[node_ttl]: ./configure.markdown#node-ttl
+[report_ttl]: ./configure.markdown#report-ttl
 [resources_type]: {{puppet}}/type.html#resources
-[logback]: ./configure.html#the-logback-logging-config-file
+[logback]: ./configure.markdown#the-logback-logging-config-file
 [dashboard]: #monitor-the-performance-dashboard
 
 PuppetDB requires a relatively small amount of maintenance and tuning. However, you should become familiar with the occasional tasks outlined in this guide.
@@ -96,4 +96,4 @@ If you've recently changed the certificates in use by the PuppetDB server, you'l
 If you've installed PuppetDB from Puppet packages, you can simply re-run the
 `puppetdb ssl-setup` command. Otherwise, you'll need to again perform the SSL
 configuration steps outlined in
-[the installation instructions](./install_from_source.html).
+[the installation instructions](./install_from_source.markdown).

@@ -5,7 +5,7 @@ layout: default
 
 [installpuppet]: {{puppet}}/install_pre.html
 [repos]: {{puppet}}/puppet_platform.html
-[export]: ./anonymization.html
+[export]: ./anonymization.markdown
 [installpeclienttools]: {{pe}}/install_pe_client_tools.html
 
 ## Installation

@@ -4,7 +4,7 @@ layout: default
 ---
 
 [module]: http://forge.puppet.com/puppetlabs/puppetdb
-[config_with_module]: ./configure.html#playing-nice-with-the-puppetdb-module
+[config_with_module]: ./configure.markdown#playing-nice-with-the-puppetdb-module
 
 > **Note:** If you are running Puppet Enterprise version 3.0 or later, you do
 > not need to install PuppetDB, as it is already installed as part of PE.
@@ -19,7 +19,7 @@ and the PuppetDB-termini for your Puppet master) using
   we expect that you already know how to assign Puppet classes to nodes.
 * If you are **just getting started with Puppet,** you may find it easier to
   follow our guide to
-  [installing PuppetDB from packages](./install_from_packages.html).
+  [installing PuppetDB from packages](./install_from_packages.markdown).
 
 Step 1: Enable the Puppet Platform package repository
 -----

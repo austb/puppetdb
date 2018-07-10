@@ -5,15 +5,15 @@ canonical: "/puppetdb/latest/configure.html"
 ---
 
 [logback]: http://logback.qos.ch/manual/configuration.html
-[dashboard]: ./maintain_and_tune.html#monitor-the-performance-dashboard
-[repl]: ./repl.html
+[dashboard]: ./maintain_and_tune.markdown#monitor-the-performance-dashboard
+[repl]: ./repl.markdown
 [pg_trgm]: http://www.postgresql.org/docs/current/static/pgtrgm.html
-[postgres_ssl]: ./postgres_ssl.html
-[module]: ./install_via_module.html
-[puppetdb.conf]: ./connect_puppet_master.html#edit-puppetdbconf
-[ha]: ./ha.html
+[postgres_ssl]: ./postgres_ssl.markdown
+[module]: ./install_via_module.markdown
+[puppetdb.conf]: ./connect_puppet_master.markdown#edit-puppetdbconf
+[ha]: ./ha.markdown
 [node-ttl]: #node-ttl
-[admin-cmd]: api/admin/v1/cmd.html
+[admin-cmd]: api/admin/v1/cmd.markdown
 
 PuppetDB has three main groups of settings:
 

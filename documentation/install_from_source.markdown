@@ -1,14 +1,15 @@
 ---
 title: "PuppetDB 5.2: Installing PuppetDB from source"
 layout: default
+canonical: "/puppetdb/latest/install_from_source.html"
 ---
 
 [leiningen]: https://github.com/technomancy/leiningen#installation
-[configure_postgres]: ./configure.html#using-postgresql
-[configure_heap]: ./configure.html#configuring-the-java-heap-size
-[module]: ./install_via_module.html
-[packages]: ./install_from_packages.html
-[running_tests]: ./CONTRIBUTING.html#running-the-tests
+[configure_postgres]: ./configure.markdown#using-postgresql
+[configure_heap]: ./configure.markdown#configuring-the-java-heap-size
+[module]: ./install_via_module.markdown
+[packages]: ./install_from_packages.markdown
+[running_tests]: ./CONTRIBUTING.markdown#running-the-tests
 
 > **Note:** If you are running Puppet Enterprise version 3.0 or later, you do
 > not need to install PuppetDB, as it is already installed as part of PE.
@@ -142,7 +143,7 @@ If you are running PuppetDB from source, you should start it as follows:
 Finish: Connect Puppet to PuppetDB
 -----
 
-[You should now configure your puppet master(s) to connect to PuppetDB](./connect_puppet_master.html).
+[You should now configure your puppet master(s) to connect to PuppetDB](./connect_puppet_master.markdown).
 
 If you use a standalone Puppet site,
-[you should configure every node to connect to PuppetDB](./connect_puppet_apply.html).
+[you should configure every node to connect to PuppetDB](./connect_puppet_apply.markdown).

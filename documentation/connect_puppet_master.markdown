@@ -5,16 +5,16 @@ canonical: "/puppetdb/latest/connect_puppet_master.html"
 ---
 
 [puppetdb_download]: http://downloads.puppetlabs.com/puppetdb
-[puppetdb_conf]: ./puppetdb_connection.html
-[routes_yaml]: {{puppet}}/config_file_routes.html
-[exported]: {{puppet}}/lang_exported.html
-[install_via_module]: ./install_via_module.html
-[report_processors]: {{puppet}}/reporting_about.html
-[event]: ./api/query/v4/events.html
-[report]: ./api/query/v4/reports.html
-[store_report]: ./api/command/v1/commands.html#store-report-version-7
-[report_format]: ./api/wire_format/report_format_v5.html
-[puppetdb_server_urls]: ./puppetdb_connection.html#serverurls
+[puppetdb_conf]: ./puppetdb_connection.markdown
+[routes_yaml]: {{puppet}}/config_file_routes.markdown
+[exported]: {{puppet}}/lang_exported.markdown
+[install_via_module]: ./install_via_module.markdown
+[report_processors]: {{puppet}}/reporting_about.markdown
+[event]: ./api/query/v4/events.markdown
+[report]: ./api/query/v4/reports.markdown
+[store_report]: ./api/command/v1/commands.markdown#store-report-version-7
+[report_format]: ./api/wire_format/report_format_v5.markdown
+[puppetdb_server_urls]: ./puppetdb_connection.markdown#serverurls
 
 > Note: To use PuppetDB, your site's Puppet master(s) must be running
 > Puppet version 5.0.0 or later.

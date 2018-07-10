@@ -4,17 +4,17 @@ layout: default
 canonical: "/puppetdb/latest/api/query/v4/catalogs.html"
 ---
 
-[catalog]: ../../wire_format/catalog_format_v4.html
-[curl]: ../curl.html#using-curl-from-localhost-non-sslhttp
-[paging]: ./paging.html
-[query]: ./query.html
-[subqueries]: ./ast.html#subquery-operators
-[ast]: ./ast.html
-[edges]: ./edges.html
-[environments]: ./environments.html
-[producers]: ./producers.html
-[nodes]: ./nodes.html
-[resources]: ./resources.html
+[catalog]: ../../wire_format/catalog_format_v4.markdown
+[curl]: ../curl.markdown#using-curl-from-localhost-non-sslhttp
+[paging]: ./paging.markdown
+[query]: ./query.markdown
+[subqueries]: ./ast.markdown#subquery-operators
+[ast]: ./ast.markdown
+[edges]: ./edges.markdown
+[environments]: ./environments.markdown
+[producers]: ./producers.markdown
+[nodes]: ./nodes.markdown
+[resources]: ./resources.markdown
 
 You can query catalogs by making an HTTP request to the
 `/catalogs` endpoint.

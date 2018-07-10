@@ -4,16 +4,16 @@ layout: default
 canonical: "/puppetdb/latest/api/query/v4/events.html"
 ---
 
-[curl]: ../curl.html#using-curl-from-localhost-non-sslhttp
-[report]: ./reports.html
-[ast]: ./ast.html
-[paging]: ./paging.html
-[query]: ./query.html
+[curl]: ../curl.markdown#using-curl-from-localhost-non-sslhttp
+[report]: ./reports.markdown
+[ast]: ./ast.markdown
+[paging]: ./paging.markdown
+[query]: ./query.markdown
 [8601]: http://en.wikipedia.org/wiki/ISO_8601
-[subqueries]: ./ast.html#subquery-operators
-[environments]: ./environments.html
-[nodes]: ./nodes.html
-[reports]: ./reports.html
+[subqueries]: ./ast.markdown#subquery-operators
+[environments]: ./environments.markdown
+[nodes]: ./nodes.markdown
+[reports]: ./reports.markdown
 
 Puppet agent nodes submit reports after their runs, and the Puppet master forwards these to PuppetDB. Each report includes:
 
@@ -25,7 +25,7 @@ Once this information is stored in PuppetDB, it can be queried in various ways.
 
 * You can query **data about the run** and **report metadata** by making an HTTP request to the [`/reports`][report] endpoint.
 * You can query **data about individual events** by making an HTTP request to the `/events` endpoint.
-* You can query **summaries of event data** by making an HTTP request to the [`/event-counts`](./event-counts.html) or [`aggregate-event-counts`](./aggregate-event-counts.html) endpoints.
+* You can query **summaries of event data** by making an HTTP request to the [`/event-counts`](./event-counts.markdown) or [`aggregate-event-counts`](./aggregate-event-counts.markdown) endpoints.
 
 ## `/pdb/query/v4/events`
 

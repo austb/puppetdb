@@ -4,10 +4,10 @@ layout: default
 canonical: "/puppetdb/latest/puppetdb_connection.html"
 ---
 
-[puppetdb_root]: ./index.html
-[connect_to_puppetdb]: ./connect_puppet_master.html
+[puppetdb_root]: ./index.markdown
+[connect_to_puppetdb]: ./connect_puppet_master.markdown
 [confdir]: {{puppet}}/dirs_confdir.html
-[puppetdb_conf]: ./connect_puppet_master.html#edit-puppetdb\.conf
+[puppetdb_conf]: ./connect_puppet_master.markdown#edit-puppetdb\.conf
 
 The `puppetdb.conf` file contains the hostname and port of the [PuppetDB][puppetdb_root] server. It is only used if you are using PuppetDB and have [connected your Puppet master to it][connect_to_puppetdb].
 

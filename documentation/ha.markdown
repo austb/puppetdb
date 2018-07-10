@@ -3,10 +3,10 @@ title: "PuppetDB 5.2: PuppetDB HA"
 layout: default
 ---
 
-[configure]: ./configure.html
-[pe-configure]: ./pe-configure.html
-[logging]: ./logging.html
-[metrics]: ./api/metrics/v1/index.html
+[configure]: ./configure.markdown
+[pe-configure]: ./pe-configure.markdown
+[logging]: ./logging.markdown
+[metrics]: ./api/metrics/v1/index.markdown
 
 Configuring PuppetDB for High Availability
 -----
