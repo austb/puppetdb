@@ -15,15 +15,28 @@ test $# -eq 1 || misuse
 spec="$1"
 
 jdk="$(ext/travisci/jdk-from-spec "$spec")"
+jdkver="${jdk##*jdk}"
 pgver="$(ext/travisci/prefixed-ref-from-spec "$spec" pg-)"
 
 case "$OSTYPE" in
     darwin*)
         brew install bash
-        brew tap AdoptOpenJDK/openjdk
-        brew install adoptopenjdk-"$jdk"
         brew install postgresql@"$pgver"
-        hash -r
+
+        case "$jdkver" in
+          8)
+            brew tap homebrew/cask-versions
+            brew cask install "adoptopenjdk$jdkver"
+            ;;
+          10)
+            brew tap AdoptOpenJDK/openjdk
+            brew install adoptopenjdk-"$jdk"
+            ;;
+          *)
+            echo "JDK version '$jdk' is not supported on Mac OSX"
+            exit 3
+            ;;
+        esac
         ;;
     *)
         ;;
