@@ -27,6 +27,10 @@ case "$OSTYPE" in
           8)
             brew tap homebrew/cask-versions
             brew cask install "adoptopenjdk$jdkver"
+
+            # AdoptOpenJDK 8 by default does not trust clojars
+            rm "/Library/Java/JavaVirtualMachines/adoptopenjdk-8.jdk/Contents/Home/jre/lib/security/cacerts"
+            ln -s /etc/ssl/certs/java/cacerts "/Library/Java/JavaVirtualMachines/adoptopenjdk-8.jdk/Contents/Home/jre/lib/security/cacerts"
             ;;
           10)
             brew tap AdoptOpenJDK/openjdk
