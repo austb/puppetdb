@@ -29,8 +29,10 @@ case "$OSTYPE" in
             brew cask install "adoptopenjdk$jdkver"
 
             # AdoptOpenJDK 8 by default does not trust clojars
+
             rm "/Library/Java/JavaVirtualMachines/adoptopenjdk-8.jdk/Contents/Home/jre/lib/security/cacerts"
-            ln -s /etc/ssl/certs/java/cacerts "/Library/Java/JavaVirtualMachines/adoptopenjdk-8.jdk/Contents/Home/jre/lib/security/cacerts"
+            pem_file=$(ruby -ropenssl -e 'puts OpenSSL::X509::DEFAULT_CERT_FILE')
+            openssl x509 -outform der -in "$pem_file" -out "/Library/Java/JavaVirtualMachines/adoptopenjdk-8.jdk/Contents/Home/jre/lib/security/cacerts"
             ;;
           10)
             brew tap AdoptOpenJDK/openjdk
