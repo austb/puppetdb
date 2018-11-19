@@ -78,13 +78,13 @@ describe processor do
       end
 
       result = subject.report_to_hash(Time.now.utc)
-      result["transaction_uuid"].should == 'abc123'
+      expect(result["transaction_uuid"]).to eq('abc123')
 
       # This won't be defined on < Puppet 4.3.3
       if defined?(subject.catalog_uuid) then
-        result["catalog_uuid"].should == 'bde432'
+        expect(result["catalog_uuid"]).to eq('bde432')
       else
-        result["catalog_uuid"].should == 'abc123'
+        expect(result["catalog_uuid"]).to eq('abc123')
       end
     end
 
@@ -94,9 +94,9 @@ describe processor do
       end
       result = subject.report_to_hash(Time.now.utc)
       if defined?(subject.code_id) then
-        result["code_id"].should == 'bde432'
+        expect(result["code_id"]).to eq('bde432')
       else
-        result["code_id"].should == nil
+        expect(result["code_id"]).to be_nil
       end
     end
 
@@ -106,16 +106,16 @@ describe processor do
       end
       result = subject.report_to_hash(Time.now.utc)
       if defined?(subject.job_id) then
-        result["job_id"].should == '1337'
+        expect(result["job_id"]).to eq('1337')
       else
-        result["job_id"].should == nil
+        expect(result["job_id"]).to be_nil
       end
     end
 
     it "should include the producer or nil" do
       Puppet[:node_name_value] = "foo"
       result = subject.report_to_hash(Time.now.utc)
-      result["producer"].should == "foo"
+      expect(result["producer"]).to eq("foo")
     end
 
     it "should include noop_pending or nil" do
@@ -124,9 +124,9 @@ describe processor do
       end
       result = subject.report_to_hash(Time.now.utc)
       if defined?(subject.noop_pending) then
-        result["noop_pending"].should == false
+        expect(result["noop_pending"]).to be(false)
       else
-        result["noop_pending"].should == nil
+        expect(result["noop_pending"]).to be_nil
       end
     end
 
@@ -136,9 +136,9 @@ describe processor do
       end
       result = subject.report_to_hash(Time.now.utc)
       if defined?(subject.corrective_change) then
-        result["corrective_change"].should == false
+        expect(result["corrective_change"]).to be(false)
       else
-        result["corrective_change"].should == nil
+        expect(result["corrective_change"]).to be_nil
       end
     end
 
@@ -148,9 +148,9 @@ describe processor do
       end
       result = subject.report_to_hash(Time.now.utc)
       if defined?(subject.cached_catalog_status) then
-        result["cached_catalog_status"].should == 'not_used'
+        expect(result["cached_catalog_status"]).to eq('not_used')
       else
-        result["cached_catalog_status"].should == nil
+        expect(result["cached_catalog_status"]).to be_nil
       end
     end
 
@@ -166,7 +166,7 @@ describe processor do
           status.add_event(event)
         end
         result = subject.report_to_hash(Time.now.utc)
-        result["noop"].should == true
+        expect(result["noop"]).to be(true)
       end
     end
 
@@ -182,7 +182,7 @@ describe processor do
           status.add_event(event)
         end
         result = subject.report_to_hash(Time.now.utc)
-        result["noop"].should == false
+        expect(result["noop"]).to be(false)
       end
     end
 
@@ -192,13 +192,13 @@ describe processor do
       end
 
       it "should base run duration off of the 'time'->'total' metric" do
-        subject.send(:run_duration).should == 10
+        expect(subject.send(:run_duration)).to eq(10)
       end
 
       it "should use run_duration to calculate the end_time" do
         result = subject.report_to_hash(Time.now.utc)
         duration = Time.parse(result["end_time"]) - Time.parse(result["start_time"])
-        duration.should == subject.send(:run_duration)
+        expect(duration).to eq(subject.send(:run_duration))
       end
     end
 
@@ -212,13 +212,13 @@ describe processor do
           result = subject.report_to_hash(Time.now.utc)
           # the server will populate the report id, so we validate that the
           # client doesn't include one
-          result.has_key?("report").should be_falsey
-          result["certname"].should == subject.host
-          result["puppet_version"].should == subject.puppet_version
-          result["report_format"].should == subject.report_format
-          result["configuration_version"].should == subject.configuration_version.to_s
-          result["resources"].should == []
-          result["noop"].should == false
+          expect(result.has_key?("report")).to be_falsey
+          expect(result["certname"]).to eq(subject.host)
+          expect(result["puppet_version"]).to eq(subject.puppet_version)
+          expect(result["report_format"]).to eq(subject.report_format)
+          expect(result["configuration_version"]).to eq(subject.configuration_version.to_s)
+          expect(result["resources"]).to eq([])
+          expect(result["noop"]).to be(false)
         end
       end
 
@@ -237,29 +237,29 @@ describe processor do
 
           result = subject.report_to_hash(Time.now.utc)
 
-          result["resources"].length.should == 1
+          expect(result["resources"].length).to eq(1)
           res = result["resources"][0]
-          res["resource_type"].should == "Foo"
-          res["resource_title"].should == "foo"
-          res["file"].should == "foo"
-          res["line"].should == 1
-          res["containment_path"].should == ["foo", "bar", "baz"]
-          res["events"].length.should == 1
+          expect(res["resource_type"]).to eq("Foo")
+          expect(res["resource_title"]).to eq("foo")
+          expect(res["file"]).to eq("foo")
+          expect(res["line"]).to eq(1)
+          expect(res["containment_path"]).to eq(["foo", "bar", "baz"])
+          expect(res["events"].length).to eq(1)
           if defined?(event.corrective_change) then
-            res["corrective_change"].should == true
+            expect(res["corrective_change"]).to be(true)
           else
-            res["corrective_change"].should == nil
+            expect(res["corrective_change"]).to be_nil
           end
 
           res_event = res["events"][0]
-          res_event["property"].should == "fooprop"
-          res_event["new_value"].should == "fooval"
-          res_event["old_value"].should == "oldfooval"
-          res_event["message"].should == "foomessage"
+          expect(res_event["property"]).to eq("fooprop")
+          expect(res_event["new_value"]).to eq("fooval")
+          expect(res_event["old_value"]).to eq("oldfooval")
+          expect(res_event["message"]).to eq("foomessage")
           if defined?(event.corrective_change) then
-            res_event["corrective_change"].should == true
+            expect(res_event["corrective_change"]).to be(true)
           else
-            res_event["corrective_change"].should == nil
+            expect(res_event["corrective_change"]).to be_nil
           end
         end
       end
@@ -269,12 +269,12 @@ describe processor do
           status.skipped = true
           result = subject.report_to_hash(Time.now.utc)
 
-          result["resources"].length.should == 1
+          expect(result["resources"].length).to eq(1)
           resource = result["resources"][0]
-          resource["resource_type"].should == "Foo"
-          resource["resource_title"].should == "foo"
-          resource["containment_path"].should == ["foo", "bar", "baz"]
-          resource["events"].length.should == 0
+          expect(resource["resource_type"]).to eq("Foo")
+          expect(resource["resource_title"]).to eq("foo")
+          expect(resource["containment_path"]).to eq(["foo", "bar", "baz"])
+          expect(resource["events"].length).to eq(0)
         end
       end
 
@@ -286,7 +286,7 @@ describe processor do
         context "with no events" do
           it "should have no events" do
             result = subject.report_to_hash(Time.now.utc)
-            result["resources"].length.should == 0
+            expect(result["resources"].length).to eq(0)
           end
         end
 
@@ -300,20 +300,20 @@ describe processor do
             status.add_event(event)
 
             result = subject.report_to_hash(Time.now.utc)
-            result["resources"].length.should == 1
+            expect(result["resources"].length).to eq(1)
             resource = result["resources"][0]
-            resource["resource_type"].should == "Foo"
-            resource["resource_title"].should == "foo"
-            resource["file"].should == "foo"
-            resource["line"].should == 1
-            resource["containment_path"].should == ["foo", "bar", "baz"]
-            resource["events"].length.should == 1
+            expect(resource["resource_type"]).to eq("Foo")
+            expect(resource["resource_title"]).to eq("foo")
+            expect(resource["file"]).to eq("foo")
+            expect(resource["line"]).to eq(1)
+            expect(resource["containment_path"]).to eq(["foo", "bar", "baz"])
+            expect(resource["events"].length).to eq(1)
 
             res_event = resource["events"][0]
-            res_event["property"].should == "barprop"
-            res_event["new_value"].should == "barval"
-            res_event["old_value"].should == "oldbarval"
-            res_event["message"].should == "barmessage"
+            expect(res_event["property"]).to eq("barprop")
+            expect(res_event["new_value"]).to eq("barval")
+            expect(res_event["old_value"]).to eq("oldbarval")
+            expect(res_event["message"]).to eq("barmessage")
           end
         end
       end
@@ -353,14 +353,14 @@ describe processor do
           it "should include the actual event" do
             result = subject.report_to_hash(Time.now.utc)
             unchanged_resources = result["resources"].select { |res| res["events"].empty? and ! (res["skipped"])}
-            unchanged_resources.length.should == 1
+            expect(unchanged_resources.length).to eq(1)
             resource = unchanged_resources[0]
-            resource["resource_type"].should == "Notify"
-            resource["resource_title"].should == "Hello there"
-            resource["file"].should == "foo"
-            resource["line"].should == "foo"
-            resource["containment_path"].should == ["foo", "bar", "baz"]
-            resource["events"].length.should == 0
+            expect(resource["resource_type"]).to eq("Notify")
+            expect(resource["resource_title"]).to eq("Hello there")
+            expect(resource["file"]).to eq("foo")
+            expect(resource["line"]).to eq("foo")
+            expect(resource["containment_path"]).to eq(["foo", "bar", "baz"])
+            expect(resource["events"].length).to eq(0)
           end
         end
 

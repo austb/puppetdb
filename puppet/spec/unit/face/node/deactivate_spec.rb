@@ -19,10 +19,10 @@ describe "node face: deactivate" do
       end.returns('uuid' => "uuid_#{node}")
     end
 
-    subject.deactivate(*nodes).should == {
+    expect(subject.deactivate(*nodes)).to eq({
       'a' => 'uuid_a',
       'b' => 'uuid_b',
       'c' => 'uuid_c',
-    }
+    })
   end
 end

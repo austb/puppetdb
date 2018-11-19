@@ -5,15 +5,15 @@ describe Puppet::Util::Puppetdb::Http do
 
   describe "#concat_url_snippets" do
     it "should avoid a double slash" do
-      described_class.concat_url_snippets('/foo/', '/bar/').should == '/foo/bar/'
+      expect(described_class.concat_url_snippets('/foo/', '/bar/')).to eq('/foo/bar/')
     end
     it "should add a slash if needed" do
-      described_class.concat_url_snippets('/foo', 'bar/').should == '/foo/bar/'
-      described_class.concat_url_snippets('/foo', 'bar/').should == '/foo/bar/'
+      expect(described_class.concat_url_snippets('/foo', 'bar/')).to eq('/foo/bar/')
+      expect(described_class.concat_url_snippets('/foo', 'bar/')).to eq('/foo/bar/')
     end
     it "should do the right thing if only one snippet has a slash" do
-      described_class.concat_url_snippets('/foo', '/bar/').should == '/foo/bar/'
-      described_class.concat_url_snippets('/foo/', 'bar/').should == '/foo/bar/'
+      expect(described_class.concat_url_snippets('/foo', '/bar/')).to eq('/foo/bar/')
+      expect(described_class.concat_url_snippets('/foo/', 'bar/')).to eq('/foo/bar/')
     end
   end
 
@@ -59,8 +59,8 @@ describe Puppet::Util::Puppetdb::Http do
            http_instance.get(path, {})
          end
 
-         response.code.should == 200
-         response.message.should == 'OK'
+         expect(response.code).to eq(200)
+         expect(response.message).to eq('OK')
        end
 
        it "fails over to the next url when it can't connect" do
@@ -74,8 +74,8 @@ describe Puppet::Util::Puppetdb::Http do
            http_instance.get(path, {})
          end
 
-         response.code.should == 200
-         response.message.should == 'OK'
+         expect(response.code).to eq(200)
+         expect(response.message).to eq('OK')
        end
 
        it "fails over to the next url on a server error" do
@@ -89,8 +89,8 @@ describe Puppet::Util::Puppetdb::Http do
            http_instance.get(path, {})
          end
 
-         response.code.should == 200
-         response.message.should == 'OK'
+         expect(response.code).to eq(200)
+         expect(response.message).to eq('OK')
        end
 
        it "raises an exception when all urls fail" do
@@ -118,8 +118,8 @@ describe Puppet::Util::Puppetdb::Http do
            http_instance.get(path, {})
          end
 
-         response.code.should == 200
-         response.message.should == 'OK'
+         expect(response.code).to eq(200)
+         expect(response.message).to eq('OK')
        end
 
        it "times out and rolls to the next url" do
@@ -133,8 +133,8 @@ describe Puppet::Util::Puppetdb::Http do
            http_instance.get(path, {})
          end
 
-         response.code.should == 200
-         response.message.should == 'OK'
+         expect(response.code).to eq(200)
+         expect(response.message).to eq('OK')
        end
 
        it "doesn't sends queries to hosts in submit_only_server_urls" do
@@ -151,8 +151,8 @@ describe Puppet::Util::Puppetdb::Http do
            http_instance.get(path, {})
          end
 
-         response.code.should == 200
-         response.message.should == 'OK'
+         expect(response.code).to eq(200)
+         expect(response.message).to eq('OK')
        end
 
        describe "when sticky_read_failover is false" do
@@ -167,15 +167,15 @@ describe Puppet::Util::Puppetdb::Http do
              http_instance.get(path, {})
            end
 
-           response.code.should == 200
-           response.message.should == 'OK'
+           expect(response.code).to eq(200)
+           expect(response.message).to eq('OK')
 
            response = described_class.action("/baz", :query) do |http_instance, path|
              http_instance.get(path, {})
            end
 
-           response.code.should == 200
-           response.message.should == 'OK'
+           expect(response.code).to eq(200)
+           expect(response.message).to eq('OK')
          end
        end
 
@@ -195,15 +195,15 @@ describe Puppet::Util::Puppetdb::Http do
              http_instance.get(path, {})
            end
 
-           response.code.should == 200
-           response.message.should == 'OK'
+           expect(response.code).to eq(200)
+           expect(response.message).to eq('OK')
 
            response = described_class.action("/baz", :query) do |http_instance, path|
              http_instance.get(path, {})
            end
 
-           response.code.should == 200
-           response.message.should == 'OK'
+           expect(response.code).to eq(200)
+           expect(response.message).to eq('OK')
          end
        end
 
@@ -226,8 +226,8 @@ describe Puppet::Util::Puppetdb::Http do
             http_instance.post(path, {})
           end
 
-          response.code.should == 200
-          response.message.should == 'OK'
+          expect(response.code).to eq(200)
+          expect(response.message).to eq('OK')
         end
 
         it "fails over to the next url when it can't connect" do
@@ -241,8 +241,8 @@ describe Puppet::Util::Puppetdb::Http do
             http_instance.post(path, {})
           end
 
-          response.code.should == 200
-          response.message.should == 'OK'
+          expect(response.code).to eq(200)
+          expect(response.message).to eq('OK')
         end
 
         it "fails over to the next url when one service is unavailable" do
@@ -256,8 +256,8 @@ describe Puppet::Util::Puppetdb::Http do
             http_instance.post(path, {})
           end
 
-          response.code.should == 200
-          response.message.should == 'OK'
+          expect(response.code).to eq(200)
+          expect(response.message).to eq('OK')
         end
 
         it "raises an exception when all urls fail" do
@@ -303,8 +303,8 @@ describe Puppet::Util::Puppetdb::Http do
             http_instance.post(path, {})
           end
 
-          response.code.should == 200
-          response.message.should == 'OK'
+          expect(response.code).to eq(200)
+          expect(response.message).to eq('OK')
         end
 
         it "sends commands to hosts in submit_only_server_urls" do
@@ -322,8 +322,8 @@ describe Puppet::Util::Puppetdb::Http do
             http_instance.post(path, {})
           end
 
-          response.code.should == 200
-          response.message.should == 'OK'
+          expect(response.code).to eq(200)
+          expect(response.message).to eq('OK')
         end
       end
 
@@ -343,8 +343,8 @@ describe Puppet::Util::Puppetdb::Http do
             http_instance.post(path, {})
           end
 
-          response.code.should == 200
-          response.message.should == 'OK'
+          expect(response.code).to eq(200)
+          expect(response.message).to eq('OK')
         end
 
         it "fails over to the next url when it can't connect" do
@@ -358,8 +358,8 @@ describe Puppet::Util::Puppetdb::Http do
             http_instance.post(path, {})
           end
 
-          response.code.should == 200
-          response.message.should == 'OK'
+          expect(response.code).to eq(200)
+          expect(response.message).to eq('OK')
         end
 
         it "raises an exception when all urls fail" do
@@ -391,8 +391,8 @@ describe Puppet::Util::Puppetdb::Http do
             http_instance.post(path, {})
           end
 
-          response.code.should == 200
-          response.message.should == 'OK'
+          expect(response.code).to eq(200)
+          expect(response.message).to eq('OK')
         end
       end
 

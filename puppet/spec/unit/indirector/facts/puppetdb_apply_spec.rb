@@ -20,7 +20,7 @@ describe Puppet::Node::Facts::PuppetdbApply do
 
   describe "#find" do
     it "always returns nil to force the cache to be skipped" do
-      subject.find('foo').should be_nil
+      expect(subject.find('foo')).to be_nil
     end
   end
 

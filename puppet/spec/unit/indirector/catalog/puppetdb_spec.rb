@@ -76,13 +76,13 @@ describe Puppet::Resource::Catalog::Puppetdb do
     describe "#add_transaction_uuid" do
       it "should add the given transaction uuid" do
         result = subject.add_transaction_uuid(catalog_data_hash, 'abc123')
-        result['transaction_uuid'].should == 'abc123'
+        expect(result['transaction_uuid']).to eq('abc123')
       end
 
       it "should add nil transaction uuid if none was given" do
         result = subject.add_transaction_uuid(catalog_data_hash, nil)
-        result.has_key?('transaction_uuid').should be_truthy
-        result['transaction_uuid'].should be_nil
+        expect(result.has_key?('transaction_uuid')).to be_truthy
+        expect(result['transaction_uuid']).to be_nil
       end
     end
 
@@ -94,10 +94,10 @@ describe Puppet::Resource::Catalog::Puppetdb do
           if (Gem::Version.new(Puppet.version) >= Gem::Version.new('4.3.2') and
               catalog_data_hash.has_key?('catalog_uuid')) then
             result = subject.add_catalog_uuid_if_missing(catalog_data_hash, 'abc123')
-            result['catalog_uuid'].should_not == 'abc123'
+            expect(result['catalog_uuid']).not_to eq('abc123')
           else
             result = subject.add_catalog_uuid_if_missing(catalog_data_hash, 'abc123')
-            result['catalog_uuid'].should == 'abc123'
+            expect(result['catalog_uuid']).to eq('abc123')
           end
         end
     end
@@ -105,24 +105,24 @@ describe Puppet::Resource::Catalog::Puppetdb do
     describe "#add_code_id_if_missing" do
       it "should add the code_id key" do
         result = subject.add_code_id_if_missing(catalog_data_hash)
-        result.has_key?('code_id').should be_truthy
-        result['code_id'].should be_nil
+        expect(result.has_key?('code_id')).to be_truthy
+        expect(result['code_id']).to be_nil
       end
     end
 
     describe "#add_job_id_if_missing" do
       it "should add the job_id key" do
         result = subject.add_job_id_if_missing(catalog_data_hash, nil)
-        result.has_key?('job_id').should be_truthy
-        result['job_id'].should be_nil
+        expect(result.has_key?('job_id')).to be_truthy
+        expect(result['job_id']).to be_nil
       end
     end
 
     describe "#add_producer" do
       it "should add the producer key" do
-        result = subject.add_producer(catalog_data_hash, "foo")
-        result.has_key?('producer').should be_truthy
-        result['producer'].should == "foo"
+        result = subject.add_producer(catalog_data_hash, 'foo')
+        expect(result.has_key?('producer')).to be_truthy
+        expect(result['producer']).to eq('foo')
       end
     end
 
@@ -131,7 +131,7 @@ describe Puppet::Resource::Catalog::Puppetdb do
         result = subject.add_parameters_if_missing(catalog_data_hash)
 
         result['resources'].each do |res|
-          res['parameters'].should be_a(Hash)
+          expect(res['parameters']).to be_a(Hash)
         end
       end
 
@@ -144,8 +144,8 @@ describe Puppet::Resource::Catalog::Puppetdb do
           res['type'] == 'Notify' and res['title'] == 'anyone'
         end
 
-        resource.should_not be_nil
-        resource['parameters'].should == {'message' => msg}
+        expect(resource).not_to be_nil
+        expect(resource['parameters']).to eq({'message' => msg})
       end
     end
 
@@ -161,8 +161,8 @@ describe Puppet::Resource::Catalog::Puppetdb do
           res['type'] == 'Notify' and res['title'] == 'anyone'
         end
 
-        resource.should_not be_nil
-        resource['parameters']['alias'].should include(name)
+        expect(resource).not_to be_nil
+        expect(resource['parameters']['alias']).to include(name)
       end
 
       context "with resource types that provide #title_patterns" do
@@ -202,9 +202,9 @@ describe Puppet::Resource::Catalog::Puppetdb do
             #  namevar (in this case, removes trailing slashes), but hopefully
             #  this test should cover other resource types that fall into
             #  this category as well.
-            resource.should_not be_nil
-            resource['parameters']['alias'].should_not be_nil
-            resource['parameters']['alias'].should include('/tmp/foo')
+            expect(resource).not_to be_nil
+            expect(resource['parameters']['alias']).not_to be_nil
+            expect(resource['parameters']['alias']).to include('/tmp/foo')
           end
         end
       end
@@ -217,8 +217,8 @@ describe Puppet::Resource::Catalog::Puppetdb do
           res['type'] == 'Notify' and res['title'] == 'anyone'
         end
 
-        resource.should_not be_nil
-        resource['parameters']['alias'].should be_nil
+        expect(resource).not_to be_nil
+        expect(resource['parameters']['alias']).to be_nil
       end
 
       describe "for resources with composite namevars" do
@@ -236,8 +236,8 @@ describe Puppet::Resource::Catalog::Puppetdb do
             res['type'] == 'Notify' and res['title'] == 'yo matey'
           end
 
-          resource.should_not be_nil
-          resource['parameters']['alias'].should be_nil
+          expect(resource).not_to be_nil
+          expect(resource['parameters']['alias']).to be_nil
         end
       end
 
@@ -254,8 +254,8 @@ describe Puppet::Resource::Catalog::Puppetdb do
             res['type'] == 'Exec' and res['title'] == 'an_exec'
           end
 
-          resource.should_not be_nil
-          resource['parameters']['alias'].should == ['something awesome']
+          expect(resource).not_to be_nil
+          expect(resource['parameters']['alias']).to eq(['something awesome'])
         end
       end
     end
@@ -276,10 +276,10 @@ describe Puppet::Resource::Catalog::Puppetdb do
           res['type'] == 'Exec' and res['title'] == 'an_exec'
         end
 
-        resource.should_not be_nil
-        resource['parameters']['command'].should == '/bin/true'
-        resource['parameters']['path'].should == ['/foo/goo', '/foo/bar']
-        resource['parameters']['audit'].should == 'path'
+        expect(resource).not_to be_nil
+        expect(resource['parameters']['command']).to eq('/bin/true')
+        expect(resource['parameters']['path']).to eq(['/foo/goo', '/foo/bar'])
+        expect(resource['parameters']['audit']).to eq('path')
       end
 
       it "should sort unordered metaparams with array values" do
@@ -290,9 +290,9 @@ describe Puppet::Resource::Catalog::Puppetdb do
           res['type'] == 'Exec' and res['title'] == 'an_exec'
         end
 
-        resource.should_not be_nil
-        resource['parameters']['audit'].should == 'path'
-        resource['parameters']['tag'].should == ['a', 'b', 'c']
+        expect(resource).not_to be_nil
+        expect(resource['parameters']['audit']).to eq('path')
+        expect(resource['parameters']['tag']).to eq(['a', 'b', 'c'])
       end
     end
 
@@ -301,13 +301,13 @@ describe Puppet::Resource::Catalog::Puppetdb do
         result = subject.munge_edges(catalog_data_hash)
 
         # Ensure we don't get a vacuous success from an empty list
-        result['edges'].should_not be_empty
+        expect(result['edges']).not_to be_empty
 
         result['edges'].each do |edge|
-          edge['source'].should be_a(Hash)
-          edge['source'].keys.should =~ ['type', 'title']
-          edge['target'].should be_a(Hash)
-          edge['target'].keys.should =~ ['type', 'title']
+          expect(edge['source']).to be_a(Hash)
+          expect(edge['source'].keys).to match_array(['type', 'title'])
+          expect(edge['target']).to be_a(Hash)
+          expect(edge['target'].keys).to match_array(['type', 'title'])
         end
       end
 
@@ -321,13 +321,13 @@ describe Puppet::Resource::Catalog::Puppetdb do
         hash['edges'] << edge.dup
 
         result = subject.munge_edges(hash)
-        result['edges'].should include(edge)
+        expect(result['edges']).to include(edge)
       end
 
       it "should set the edge relationship to contains if it doesn't have one" do
         result = subject.munge_edges(catalog_data_hash)
         result['edges'].each do |edge|
-          edge['relationship'].should == 'contains'
+          expect(edge['relationship']).to eq('contains')
         end
       end
     end
@@ -345,7 +345,7 @@ describe Puppet::Resource::Catalog::Puppetdb do
                 'target' => {'type' => 'Notify', 'title' => 'noone'},
                 'relationship' => 'required-by'}
 
-        result['edges'].should include(edge)
+        expect(result['edges']).to include(edge)
       end
 
       it "should add edges from relationship arrows" do
@@ -361,7 +361,7 @@ describe Puppet::Resource::Catalog::Puppetdb do
                 'target' => {'type' => 'Notify', 'title' => 'noone'},
                 'relationship' => 'before'}
 
-        result['edges'].should include(edge)
+        expect(result['edges']).to include(edge)
       end
 
       it "should allow resources with newlines" do
@@ -401,7 +401,7 @@ describe Puppet::Resource::Catalog::Puppetdb do
 
           result = subject.munge_catalog(catalog, Time.now.utc)
 
-          result['edges'].should include(edge)
+          expect(result['edges']).to include(edge)
         end
 
         it "should add edges defined on collected exported resources" do
@@ -417,7 +417,7 @@ describe Puppet::Resource::Catalog::Puppetdb do
 
           result = subject.munge_catalog(catalog, Time.now.utc)
 
-          result['edges'].should include(edge)
+          expect(result['edges']).to include(edge)
         end
 
         it "should fail if an edge refers to an uncollected exported resource" do
@@ -445,7 +445,7 @@ describe Puppet::Resource::Catalog::Puppetdb do
 
           result = subject.munge_catalog(catalog, Time.now.utc)
 
-          result['edges'].should_not include(edge)
+          expect(result['edges']).not_to include(edge)
         end
       end
 
@@ -471,7 +471,7 @@ describe Puppet::Resource::Catalog::Puppetdb do
 
           result = subject.munge_catalog(catalog, Time.now.utc)
 
-          result['edges'].should include(edge)
+          expect(result['edges']).to include(edge)
         end
 
         it "should add edges defined on collected virtual resources" do
@@ -487,7 +487,7 @@ describe Puppet::Resource::Catalog::Puppetdb do
 
           result = subject.munge_catalog(catalog, Time.now.utc)
 
-          result['edges'].should include(edge)
+          expect(result['edges']).to include(edge)
         end
 
         it "should add edges which refer to realized virtual resources" do
@@ -503,7 +503,7 @@ describe Puppet::Resource::Catalog::Puppetdb do
 
           result = subject.munge_catalog(catalog, Time.now.utc)
 
-          result['edges'].should include(edge)
+          expect(result['edges']).to include(edge)
         end
 
         it "should add edges defined on realized virtual resources" do
@@ -519,7 +519,7 @@ describe Puppet::Resource::Catalog::Puppetdb do
 
           result = subject.munge_catalog(catalog, Time.now.utc)
 
-          result['edges'].should include(edge)
+          expect(result['edges']).to include(edge)
         end
 
         it "should fail if an edge refers to an uncollected virtual resource" do
@@ -547,7 +547,7 @@ describe Puppet::Resource::Catalog::Puppetdb do
 
           result = subject.munge_catalog(catalog, Time.now.utc)
 
-          result['edges'].should_not include(edge)
+          expect(result['edges']).not_to include(edge)
         end
       end
 
@@ -567,7 +567,7 @@ describe Puppet::Resource::Catalog::Puppetdb do
                 'target' => {'type' => 'Notify', 'title' => 'anyone'},
                 'relationship' => 'required-by'}
 
-        result['edges'].should include(edge)
+        expect(result['edges']).to include(edge)
       end
 
       it "should produce an edge when referencing an aliased resource that supports composite namevars" do
@@ -587,7 +587,7 @@ describe Puppet::Resource::Catalog::Puppetdb do
                 'target' => {'type' => 'Notify', 'title' => 'hello'},
                 'relationship' => 'required-by'}
 
-        result['edges'].should include(edge)
+        expect(result['edges']).to include(edge)
       end
 
       it "should produce a reasonable error message for a missing 'before' relationship" do
@@ -663,7 +663,7 @@ describe Puppet::Resource::Catalog::Puppetdb do
                 'target' => {'type' => 'Notify', 'title' => 'anyone'},
                 'relationship' => 'required-by'}
 
-        result['edges'].should include(edge)
+        expect(result['edges']).to include(edge)
       end
 
       context "when dealing with file resources and trailing slashes in their titles" do
@@ -678,7 +678,7 @@ describe Puppet::Resource::Catalog::Puppetdb do
                   'target' => {'type' => 'Notify', 'title' => 'anyone'},
                   'relationship' => 'required-by'}
 
-          result['edges'].should include(edge)
+          expect(result['edges']).to include(edge)
         end
 
         it "should make an edge if the other end is a file resource with a missing trailing slash" do
@@ -709,7 +709,7 @@ describe Puppet::Resource::Catalog::Puppetdb do
                 'target' => {'type' => 'Notify', 'title' => 'anyone'},
                 'relationship' => 'required-by'}
 
-        result['edges'].should include(edge)
+        expect(result['edges']).to include(edge)
       end
 
       it "should not include virtual resources" do
@@ -720,16 +720,16 @@ describe Puppet::Resource::Catalog::Puppetdb do
         result = subject.munge_catalog(catalog, Time.now.utc)
 
         result['resources'].each do |res|
-          [res['type'], res['title']].should_not == ['Notify', 'something']
+          expect([res['type'], res['title']]).not_to eq(['Notify', 'something'])
         end
       end
 
       it "should have the correct set of keys" do
         result = subject.munge_catalog(catalog, Time.now.utc)
 
-        result.keys.should =~ ['certname', 'version', 'edges', 'resources',
+        expect(result.keys).to match_array(['certname', 'version', 'edges', 'resources',
           'transaction_uuid', 'environment', 'producer_timestamp', "code_id",
-          "job_id", "catalog_uuid", "producer"]
+          "job_id", "catalog_uuid", "producer"])
       end
 
       context 'when dealing with TagSets' do
@@ -756,7 +756,7 @@ describe Puppet::Resource::Catalog::Puppetdb do
 
         it "should convert TagSet for resource['tags']" do
           subject.hashify_tags(resource_hashes)['resources'].each do |resource|
-            resource['tags'].should be_an Array
+            expect(resource['tags']).to be_an Array
           end
         end
       end
@@ -805,11 +805,11 @@ describe Puppet::Resource::Catalog::Puppetdb do
                     'classes' => ['settings']}}
       it 'should remove any sensitive resource parameters' do
         resources = input['resources']
-        resources.any? {|r| r['sensitive_parameters']}.should be true
-        resources.any? {|r| has_secret?.call(r) }.should be true
+        expect(resources.any? {|r| r['sensitive_parameters']}).to be(true)
+        expect(resources.any? {|r| has_secret?.call(r) }).to be(true)
         subject.redact_sensitive_params(input)
-        resources.any? {|r| r['sensitive_parameters']}.should_not be true
-        resources.any? {|r| has_secret?.call(r) }.should_not be true
+        expect(resources.any? {|r| r['sensitive_parameters']}).not_to be(true)
+        expect(resources.any? {|r| has_secret?.call(r) }).not_to be(true)
       end
     end
   end

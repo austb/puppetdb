@@ -35,7 +35,7 @@ describe Puppet::Resource::Puppetdb do
       Puppet::Network::HttpPool.stubs(:http_instance).returns(http)
       http.stubs(:get).with("/pdb/query/v4/resources?query=#{query}", subject.headers, options).returns response
 
-      search("exec").should == []
+      expect(search("exec")).to eq([])
     end
 
     it "should log a deprecation warning if one is returned from PuppetDB" do
@@ -103,18 +103,18 @@ describe Puppet::Resource::Puppetdb do
 
         it "should return a list of parser resources if any resources are found" do
           found = search('File')
-          found.length.should == 2
+          expect(found.length).to eq(2)
           found.each do |item|
-            item.should be_a(Puppet::Parser::Resource)
-            item.type.should == 'File'
-            item[:ensure].should == 'present'
-            item[:mode].should == '777'
+            expect(item).to be_a(Puppet::Parser::Resource)
+            expect(item.type).to eq('File')
+            expect(item[:ensure]).to eq('present')
+            expect(item[:mode]).to eq('777')
           end
         end
 
 
         it "should not filter resources that have been found before" do
-          search('File').should == search('File')
+          expect(search('File')).to eq(search('File'))
         end
       end
 
@@ -125,8 +125,8 @@ describe Puppet::Resource::Puppetdb do
 
         it "should supply unique collector_id vals for resources collected from different hosts" do
           found = search('File')
-          found.length.should == 2
-          found[0].collector_id.should_not == found[1].collector_id
+          expect(found.length).to eq(2)
+          expect(found[0].collector_id).not_to eq(found[1].collector_id)
         end
       end
 
@@ -136,7 +136,7 @@ describe Puppet::Resource::Puppetdb do
 
   describe "#build_expression" do
     it "should return nil if there is no filter" do
-      subject.build_expression(nil).should == nil
+      expect(subject.build_expression(nil)).to be_nil
     end
 
     it "should fail if the filter uses an illegal operator" do
@@ -146,57 +146,57 @@ describe Puppet::Resource::Puppetdb do
     end
 
     it "should return an equal query if the operator is '='" do
-      subject.build_expression(['param','==','value']).should == ['=',['parameter','param'],'value']
+      expect(subject.build_expression(['param','==','value'])).to eq(['=',['parameter','param'],'value'])
     end
 
     it "should return a not-equal query if the operator is '!='" do
-      subject.build_expression(['param','!=','value']).should == ['not', ['=', ['parameter','param'],'value']]
+      expect(subject.build_expression(['param','!=','value'])).to eq(['not', ['=', ['parameter','param'],'value']])
     end
 
     it "should handle title correctly" do
-      subject.build_expression(['title','==','value']).should == ['=', 'title', 'value']
+      expect(subject.build_expression(['title','==','value'])).to eq(['=', 'title', 'value'])
     end
 
     it "should preserve the case of title queries" do
-      subject.build_expression(['title','==','VALUE']).should == ['=', 'title', 'VALUE']
+      expect(subject.build_expression(['title','==','VALUE'])).to eq(['=', 'title', 'VALUE'])
     end
 
     it "should handle tag correctly" do
-      subject.build_expression(['tag','==','value']).should == ['=', 'tag', 'value']
+      expect(subject.build_expression(['tag','==','value'])).to eq(['=', 'tag', 'value'])
     end
 
     it "should generate lowercase tag queries for case-insensitivity" do
-      subject.build_expression(['tag','==','VALUE']).should == ['=', 'tag', 'value']
+      expect(subject.build_expression(['tag','==','VALUE'])).to eq(['=', 'tag', 'value'])
     end
 
     it "should conjoin 'and' queries with 'and'" do
       query = [['tag', '==', 'one'], 'and', ['tag', '==', 'two']]
-      subject.build_expression(query).should == ['and',
-                                                  ['=', 'tag', 'one'],
-                                                  ['=', 'tag', 'two']]
+      expect(subject.build_expression(query)).to eq(['and',
+                                                      ['=', 'tag', 'one'],
+                                                      ['=', 'tag', 'two']])
     end
 
     it "should conjoin 'or' queries with 'or'" do
       query = [['tag', '==', 'one'], 'or', ['tag', '==', 'two']]
-      subject.build_expression(query).should == ['or',
-                                                  ['=', 'tag', 'one'],
-                                                  ['=', 'tag', 'two']]
+      expect(subject.build_expression(query)).to eq(['or',
+                                                      ['=', 'tag', 'one'],
+                                                      ['=', 'tag', 'two']])
     end
 
     it "should construct complex, nested queries" do
       query = [[['tag', '==', 'one'], 'and', ['tag', '==', 'two']], 'or', ['tag', '!=', 'three']]
-      subject.build_expression(query).should == ['or',
-                                                  ['and',
-                                                    ['=', 'tag', 'one'],
-                                                    ['=', 'tag', 'two']],
-                                                  ['not',
-                                                   ['=', 'tag', 'three']]]
+      expect(subject.build_expression(query)).to eq(['or',
+                                                      ['and',
+                                                        ['=', 'tag', 'one'],
+                                                        ['=', 'tag', 'two']],
+                                                      ['not',
+                                                       ['=', 'tag', 'three']]])
     end
   end
 
   describe "#headers" do
     it "should accept the correct mime type" do
-      subject.headers['Accept'].should == 'application/json'
+      expect(subject.headers['Accept']).to eq('application/json')
     end
   end
 end

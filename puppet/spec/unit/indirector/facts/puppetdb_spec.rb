@@ -72,8 +72,8 @@ describe Puppet::Node::Facts::Puppetdb do
       message = JSON.parse(sent_payload)
 
       # We shouldn't modify the original instance
-      facts.values['something'].should == 100
-      message['values']['something'].should == 100
+      expect(facts.values['something']).to eq(100)
+      expect(message['values']['something']).to eq(100)
     end
 
     it "should transform the package inventory fact when submitting" do
@@ -90,10 +90,10 @@ describe Puppet::Node::Facts::Puppetdb do
       message = JSON.parse(sent_payload)
 
       # We shouldn't modify the original instance
-      facts.values['_puppet_inventory_1'].should == inventory_fact_value
+      expect(facts.values['_puppet_inventory_1']).to eq(inventory_fact_value)
 
-      message['values']['_puppet_inventory_1'].should be_nil
-      message['package_inventory'].should == [fact_tuple]
+      expect(message['values']['_puppet_inventory_1']).to be_nil
+      expect(message['package_inventory']).to eq([fact_tuple])
     end
 
     it "shouldn't crash with a malformed inventory fact" do
@@ -167,9 +167,9 @@ describe Puppet::Node::Facts::Puppetdb do
 
 
       result = find_facts
-      result.should be_a(Puppet::Node::Facts)
-      result.name.should == 'some_node'
-      result.values.should include('a' => '1', 'b' => '2')
+      expect(result).to be_a(Puppet::Node::Facts)
+      expect(result.name).to eq('some_node')
+      expect(result.values).to include('a' => '1', 'b' => '2')
     end
 
     it "should return nil if no facts are found" do
@@ -180,7 +180,7 @@ describe Puppet::Node::Facts::Puppetdb do
 
       http.stubs(:get).with("/pdb/query/v4/nodes/some_node/facts", subject.headers, options).returns response
 
-      find_facts.should be_nil
+      expect(find_facts).to be_nil
     end
 
     it "should fail if an HTTP error code is returned" do
@@ -240,7 +240,7 @@ describe Puppet::Node::Facts::Puppetdb do
       query = CGI.escape("[\"and\",[\"=\",[\"fact\",\"kernel\"],\"Linux\"]]")
       http.stubs(:get).with("/pdb/query/v4/nodes?query=#{query}",  subject.headers, options).returns(response)
 
-      search_facts(args).should == ['foo', 'bar', 'baz']
+      expect(search_facts(args)).to eq(['foo', 'bar', 'baz'])
     end
 
     it "should only allow searches against facts" do

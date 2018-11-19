@@ -23,9 +23,9 @@ describe Puppet::Util::Puppetdb::Config do
     describe "with no config file" do
       it "should use the default settings" do
         config = described_class.load
-        config.server_urls.should == [URI("https://puppetdb:8081")]
-        config.submit_only_server_urls.should == []
-        config.min_successful_submissions.should == 1
+        expect(config.server_urls).to eq([URI("https://puppetdb:8081")])
+        expect(config.submit_only_server_urls).to eq([])
+        expect(config.min_successful_submissions).to eq(1)
       end
 
     end
@@ -56,16 +56,16 @@ server_urls = https://main-server:1234
 soft_write_failure = true
 CONF
         config = described_class.load
-        config.server_urls.should == [URI("https://main-server:1234")]
-        config.soft_write_failure.should be_truthy
+        expect(config.server_urls).to eq([URI("https://main-server:1234")])
+        expect(config.soft_write_failure).to be_truthy
       end
 
       it "should use the default if no value is specified" do
         write_config ''
 
         config = described_class.load
-        config.server_urls.should == [URI("https://puppetdb:8081")]
-        config.soft_write_failure.should be_falsey
+        expect(config.server_urls).to eq([URI("https://puppetdb:8081")])
+        expect(config.soft_write_failure).to be_falsey
       end
 
       it "should be insensitive to whitespace" do
@@ -75,8 +75,8 @@ CONF
         soft_write_failure = true
 CONF
         config = described_class.load
-        config.server_urls.should == [URI("https://main-server:1234")]
-        config.soft_write_failure.should be_truthy
+        expect(config.server_urls).to eq([URI("https://main-server:1234")])
+        expect(config.soft_write_failure).to be_truthy
       end
 
       it "should accept valid hostnames" do
@@ -86,7 +86,7 @@ server_urls = https://foo.example-thing.com:8081
 CONF
 
         config = described_class.load
-        config.server_urls.should == [URI("https://foo.example-thing.com:8081")]
+        expect(config.server_urls).to eq([URI("https://foo.example-thing.com:8081")])
       end
 
       it "should raise if a setting is outside of a section" do
@@ -127,7 +127,7 @@ server_urls = https://foo.something-different.com:8080
 CONF
 
         config = described_class.load
-        config.server_urls.should == [URI("https://foo.something-different.com:8080")]
+        expect(config.server_urls).to eq([URI("https://foo.something-different.com:8080")])
       end
 
       it "should accept multiple urls" do
@@ -139,7 +139,7 @@ server_urls = https://foo.something-different.com,https://bar.example-thing.com:
 CONF
 
         config = described_class.load
-        config.server_urls.should == [URI("https://foo.something-different.com"), URI("https://bar.example-thing.com:8989")]
+        expect(config.server_urls).to eq([URI("https://foo.something-different.com"), URI("https://bar.example-thing.com:8989")])
       end
 
       it "should fail if given an http URL" do
@@ -228,9 +228,9 @@ server_urls = https://foo.something-different.com   ,      https://bar.example-t
 CONF
 
         config = described_class.load
-        config.server_urls.should == [URI("https://foo.something-different.com"),
+        expect(config.server_urls).to eq([URI("https://foo.something-different.com"),
                                       URI("https://bar.example-thing.com:8989"),
-                                      URI("https://baz.example-thing.com:8989")]
+                                      URI("https://baz.example-thing.com:8989")])
       end
 
       it "should read submit_only_server_urls" do
@@ -241,8 +241,8 @@ submit_only_server_urls = https://bar.com
 CONF
 
         config = described_class.load
-        config.server_urls.should == [URI("https://foo.com")]
-        config.submit_only_server_urls.should == [URI("https://bar.com")]
+        expect(config.server_urls).to eq([URI("https://foo.com")])
+        expect(config.submit_only_server_urls).to eq([URI("https://bar.com")])
       end
 
       it "shouldn't allow submit_only_server_urls to overlap with server_urls" do
@@ -265,8 +265,8 @@ command_broadcast = true
 CONF
 
         config = described_class.load
-        config.server_urls.should == [URI("https://foo.com"), URI("https://bar.com")]
-        config.command_broadcast.should == true
+        expect(config.server_urls).to eq([URI("https://foo.com"), URI("https://bar.com")])
+        expect(config.command_broadcast).to be(true)
       end
 
       it "should read min_successful_submissions" do
@@ -278,9 +278,9 @@ min_successful_submissions = 2
 CONF
 
         config = described_class.load
-        config.server_urls.should == [URI("https://foo.com"), URI("https://bar.com")]
-        config.command_broadcast.should == true
-        config.min_successful_submissions.should == 2
+        expect(config.server_urls).to eq([URI("https://foo.com"), URI("https://bar.com")])
+        expect(config.command_broadcast).to eq(true)
+        expect(config.min_successful_submissions).to eq(2)
       end
 
       it "should only allow min_successful_submissions when command_broadcast is set" do
@@ -314,8 +314,8 @@ sticky_read_failover = true
 CONF
 
         config = described_class.load
-        config.server_urls.should == [URI("https://foo.com"), URI("https://bar.com")]
-        config.sticky_read_failover.should == true
+        expect(config.server_urls).to eq([URI("https://foo.com"), URI("https://bar.com")])
+        expect(config.sticky_read_failover).to be(true)
       end
 
     end

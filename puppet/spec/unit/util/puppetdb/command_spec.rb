@@ -26,17 +26,17 @@ describe Puppet::Util::Puppetdb::Command do
         httpok.stubs(:body).returns '{"uuid": "a UUID"}'
         http.expects(:post).with() do | path, payload, headers, options |
           param_map = CGI::parse(URI(path).query)
-          param_map['certname'].first.should == 'foo.localdomain' &&
-            param_map['version'].first.should == '1' &&
-            param_map['command'].first.should == 'OPEN_SESAME'
-          options[:compress].should == :gzip
-          options[:metric_id].should == [:puppetdb, :command, 'OPEN_SESAME']
+          expect(param_map['certname'].first).to eq('foo.localdomain')
+          expect(param_map['version'].first).to eq('1')
+          expect(param_map['command'].first).to eq('OPEN_SESAME')
+          expect(options[:compress]).to eq(:gzip)
+          expect(options[:metric_id]).to eq([:puppetdb, :command, 'OPEN_SESAME'])
         end.returns(httpok)
 
         subject.submit
-        test_logs.find_all { |m|
+        expect(test_logs.find_all { |m|
           m =~ /'#{subject.command}' command for #{subject.certname} submitted to PuppetDB/
-        }.length.should == 1
+        }.length).to eq(1)
       end
     end
 
@@ -69,7 +69,7 @@ describe Puppet::Util::Puppetdb::Command do
   it "should not warn when the the string contains valid UTF-8 characters" do
     Puppet.expects(:warning).never
     cmd = described_class.new("command-1", 1, "foo.localdomain", Time.now.utc, {"foo" => "\u2192"})
-    cmd.payload.include?("\u2192").should be_truthy
+    expect(cmd.payload.include?("\u2192")).to be_truthy
   end
 
   describe "on ruby >= 1.9" do
@@ -77,7 +77,7 @@ describe Puppet::Util::Puppetdb::Command do
     it "should warn when a command payload includes non-ascii UTF-8 characters" do
       Puppet.expects(:warning).with {|msg| msg =~ /Error encoding a 'command-1' command for host 'foo.localdomain' ignoring invalid UTF-8 byte sequences/}
       cmd = described_class.new("command-1", 1, "foo.localdomain", Time.now.utc, {"foo" => [192].pack('c*')})
-      cmd.payload.include?("\ufffd").should be_truthy
+      expect(cmd.payload.include?("\ufffd")).to be_truthy
     end
 
     describe "Debug log testing of bad data" do
@@ -101,7 +101,7 @@ describe Puppet::Util::Puppetdb::Command do
             msg =~ /1 invalid\/undefined/
         end
         cmd = described_class.new("command-1", 1, "foo.localdomain", Time.now.utc, {"foo" => [192].pack('c*')})
-        cmd.payload.include?("\ufffd").should be_truthy
+        expect(cmd.payload.include?("\ufffd")).to be_truthy
       end
     end
   end
