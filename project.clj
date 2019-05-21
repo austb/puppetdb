@@ -222,6 +222,7 @@
 
   :plugins [[lein-release "1.0.5" :exclusions [org.clojure/clojure]]
             [lein-cloverage "1.0.6" :exclusions [org.clojure/clojure]]
+            [lein-voom "0.1.0-20150310_182838-g70a25a5"]
             [lein-parent "0.3.5"]
             [puppetlabs/i18n ~i18n-version]]
 
