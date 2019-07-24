@@ -69,13 +69,34 @@
     :resources {:munge resources/munge-result-rows
                 :rec eng/resources-query}}))
 
+(defn munge-entity
+  [entity query-options]
+  (cond
+    (and (:include_package_inventory query-options)
+         (= entity :factsets))
+    :factsets-with-packages
+
+    :else entity))
+
 (defn get-munge
-  [entity]
-  (if-let [munge-result (get-in @entity-fn-idx [entity :munge])]
+  [entity query-options]
+  (let [query-entity (munge-entity entity query-options)
+        munge-result (get-in @entity-fn-idx [query-entity :munge])]
+  (if munge-result
     munge-result
     (throw (IllegalArgumentException.
             (tru "Invalid entity ''{0}'' in query"
                  (utils/dashes->underscores (name entity)))))))
+
+(defn get-query-rec
+  [entity query-options]
+  (let [query-entity (munge-entity entity query-options)
+        query-rec (get-in @entity-fn-idx [query-entity :rec])]
+    (if query-rec
+      query-rec
+      (throw (IllegalArgumentException.
+            (tru "Invalid entity ''{0}'' in query"
+                 (utils/dashes->underscores (name entity))))))))
 
 (defn orderable-columns
   [query-rec]
@@ -105,17 +126,14 @@
     (events/legacy-query->sql false version query query-options)
 
     :else
-    (let [query-rec (if (and (:include_package_inventory query-options)
-                             (= entity :factsets))
-                      (get-in @entity-fn-idx [:factsets-with-packages :rec])
-                      (get-in @entity-fn-idx [entity :rec]))
+    (let [query-rec (get-query-rec entity query-options)
           columns (orderable-columns query-rec)]
       (paging/validate-order-by! columns query-options)
       (eng/compile-user-query->sql query-rec query query-options))))
 
 (defn get-munge-fn
-  [entity version paging-options url-prefix]
-  (let [munge-fn (get-munge entity)]
+  [entity version paging-options query-options url-prefix]
+  (let [munge-fn (get-munge entity query-options)]
     (case entity
       :event-counts
       (munge-fn (:summarize_by paging-options) version url-prefix)
@@ -143,7 +161,7 @@
           :or {warn-experimental true
                pretty-print false}} options
          {:keys [remaining-query entity]} (eng/parse-query-context version query warn-experimental)
-         munge-fn (get-munge-fn entity version paging-options url-prefix)]
+         munge-fn (get-munge-fn entity version paging-options options url-prefix)]
      (jdbc/with-transacted-connection scf-read-db
        (let [{:keys [results-query]}
              (query->sql remaining-query entity version paging-options)]
@@ -195,7 +213,7 @@
 
     (try
       (jdbc/with-transacted-connection scf-read-db
-        (let [munge-fn (get-munge-fn entity version query-options url-prefix)
+        (let [munge-fn (get-munge-fn entity version {} query-options url-prefix)
               {:keys [results-query count-query]} (-> remaining-query
                                                       coerce-from-json
                                                       (query->sql entity version query-options))
