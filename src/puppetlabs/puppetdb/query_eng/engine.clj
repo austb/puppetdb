@@ -199,6 +199,9 @@
                              "environment" {:type :string
                                             :queryable? true
                                             :field :environments.environment}
+                             "facts.os" {:type :json
+                                         :queryable? true
+                                         :field (hcore/raw "(fs.stable||fs.volatile)->'os'")}
                              "facts" {:type :queryable-json
                                       :queryable? true
                                       :field (hcore/raw "(fs.stable||fs.volatile)")}
@@ -1181,6 +1184,12 @@
                                                    [:is-not :deactivated nil]
                                                    [:is-not :expired nil]]}}))
 
+(defn quote-dotted-projections
+  [projection]
+  (if (re-find #"\." projection)
+    (str "\"" projection "\"")
+    projection))
+
 (defn honeysql-from-query
   "Convert a query to honeysql format"
   [{:keys [projected-fields group-by call selection projections entity subquery?]}]
@@ -1191,8 +1200,8 @@
                  (vec (concat (->> projections
                                    (remove (comp :query-only? second))
                                    (mapv (fn [[name {:keys [field]}]]
-                                           [field name])))
-                              fs)))
+                                           [field (quote-dotted-projections name)])))
+                              fs))))
         new-selection (-> (cond-> selection (not subquery?) wrap-with-inactive-nodes-cte)
                           (assoc :select select)
                           (cond-> group-by (assoc :group-by group-by)))]
