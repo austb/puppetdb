@@ -199,9 +199,6 @@
                              "environment" {:type :string
                                             :queryable? true
                                             :field :environments.environment}
-                             "facts.os" {:type :json
-                                         :queryable? true
-                                         :field (hcore/raw "(fs.stable||fs.volatile)->'os'")}
                              "facts" {:type :queryable-json
                                       :queryable? true
                                       :field (hcore/raw "(fs.stable||fs.volatile)")}
@@ -221,8 +218,8 @@
 
                :alias "inventory"
                :relationships certname-relations
-
                :dotted-fields ["facts\\..*" "trusted\\..*"]
+               :subextractable-fields ["facts" "trusted"]
                :entity :inventory
                :subquery? false}))
 
@@ -1193,7 +1190,7 @@
 (defn honeysql-from-query
   "Convert a query to honeysql format"
   [{:keys [projected-fields group-by call selection projections entity subquery?]}]
-  (let [fs (seq (map (comp hcore/raw :statement) call))
+  (let [fs (seq (map (comp hcore/raw :statement) call)) ; TODO - no idea what fs is
         select (if (and fs
                         (empty? projected-fields))
                  (vec fs)
@@ -1201,7 +1198,7 @@
                                    (remove (comp :query-only? second))
                                    (mapv (fn [[name {:keys [field]}]]
                                            [field (quote-dotted-projections name)])))
-                              fs))))
+                              fs)))
         new-selection (-> (cond-> selection (not subquery?) wrap-with-inactive-nodes-cte)
                           (assoc :select select)
                           (cond-> group-by (assoc :group-by group-by)))]
@@ -1757,7 +1754,9 @@
    to be modified."
   [{:keys [projections] :as query-rec} column-list expr]
   (let [names->fields (fn [names projections]
-                        (mapv #(vector % (projections %))
+                        (mapv #(if (string? %) (vector % (projections %)) (vector (str/join "." %) {:type :json
+                                         :queryable? true
+                                         :field (hcore/raw (str "(fs.stable||fs.volatile)->'" (str/join "'->'" (drop 1 %)) "'"))}))
                               names))]
     (if (or (nil? expr)
             (not (subquery-expression? expr)))
@@ -2098,9 +2097,11 @@
 (declare push-down-context)
 
 (defn unsupported-fields
-  [field allowed-fields]
+  [field allowed-fields allowed-subextracts]
   (let [supported-calls (set (map #(vector "function" %) (keys pdb-fns->pg-fns)))]
-    (remove #(or (contains? (set allowed-fields) %) (contains? supported-calls (take 2 %)))
+    (remove #(or (contains? (set allowed-fields) %)
+                 (contains? supported-calls (take 2 %))
+                 (and (vec? %) (contains? (set allowed-subextracts) (first %))))
             (ks/as-collection field))))
 
 (defn validate-query-operation-fields
@@ -2108,8 +2109,8 @@
   message string if some of the fields are invalid.
 
   Error-action and error-context parameters help in formatting different error messages."
-  [field allowed-fields query-name error-action error-context]
-  (let [invalid-fields (unsupported-fields field allowed-fields)]
+  [field allowed-fields allowed-subextracts query-name error-action error-context]
+  (let [invalid-fields (unsupported-fields field allowed-fields allowed-subextracts)]
     (when (> (count invalid-fields) 0)
       (format "%s unknown '%s' %s %s%s. Acceptable fields are %s"
               error-action
@@ -2140,6 +2141,7 @@
                       nested-qc (:query-context (meta subquery-expr))
                       column-validation-message (validate-query-operation-fields
                                                  column
+                                                 [] ; TODO - is this for the single ["extract", "certname"] form?
                                                  (queryable-fields nested-qc)
                                                  (:alias nested-qc)
                                                  "Can't extract" "")]
@@ -2207,9 +2209,11 @@
             [["extract" field & _]]
             (let [query-context (:query-context (meta node))
                   extractable-fields (projectable-fields query-context)
+                  allowed-vec-fields (:subextractable-fields query-context)
                   column-validation-message (validate-query-operation-fields
                                               field
                                               extractable-fields
+                                              allowed-vec-fields
                                               (:alias query-context)
                                               "Can't extract" "")]
               (when column-validation-message
@@ -2235,6 +2239,7 @@
                   column-validation-message (validate-query-operation-fields
                                              field
                                              (queryable-fields query-context)
+                                             []
                                              (:alias query-context)
                                              "Can't match on" "for 'in'")]
               (when column-validation-message
