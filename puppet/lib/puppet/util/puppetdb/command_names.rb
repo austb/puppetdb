@@ -5,5 +5,6 @@ module Puppet::Util::Puppetdb
     CommandDeactivateNode   = "deactivate node"
     CommandStoreReport      = "store report"
     CommandReplaceCatalogInputs = "replace catalog inputs"
+    CommandDeleteNode = "delete"
   end
 end

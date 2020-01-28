@@ -63,6 +63,21 @@ module Puppet::Util::Puppetdb
     end
   end
 
+  # Submit a command to PuppetDB.
+  #
+  # @param certname [String] The certname this command operates on
+  # @param payload [String] payload
+  # @param command_name [String] name of command
+  # @param version [Number] version number of command
+  # @return [Hash <String, String>]
+  def submit_admin_command(certname, payload, command_name, version)
+    profile("Submitted admin command '#{command_name}' version '#{version}'",
+            [:puppetdb, :command, :submit, command_name, version]) do
+      command = Puppet::Util::Puppetdb::Command.new(command_name, version, certname, nil, payload)
+      command.submit
+    end
+  end
+
   # Query PuppetDB.
   #
   # @param query [String, Array] The PQL or AST query for PuppetDB

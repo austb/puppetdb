@@ -18,4 +18,10 @@ class Puppet::Node::Puppetdb < Puppet::Indirector::REST
 
     submit_command(request.key, payload, CommandDeactivateNode, 3, current_time.clone.utc)
   end
+
+  def delete(request)
+    payload = { :certname => request.key }
+
+    submit_admin_command(request.key, payload, CommandDeleteNode, 1)
+  end
 end

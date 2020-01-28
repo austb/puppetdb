@@ -10,6 +10,11 @@ class Puppet::Util::Puppetdb::Command
   include Puppet::Util::Puppetdb::CommandNames
 
   CommandsUrl = "/pdb/cmd/v1"
+  AdminCommandsUrl = "/pdb/admin/v1/cmd"
+
+  def admin_cmd?(command = nil)
+    @is_admin_command ||= command == CommandDeleteNode
+  end
 
   # Public instance methods
 
@@ -25,11 +30,20 @@ class Puppet::Util::Puppetdb::Command
   #   by JSON serialization / deserialization libraries.
   def initialize(command, version, certname, producer_timestamp_utc, payload)
     profile("Format payload", [:puppetdb, :payload, :format]) do
-      @checksum_payload = Puppet::Util::Puppetdb::CharEncoding.utf8_string({
-        :command => command,
-        :version => version,
-        :certname => certname,
-        :payload => payload,
+      if admin_cmd?(command)
+        checksum_payload = {
+          :command => command,
+          :version => version,
+          :payload => payload,
+        }
+      else
+        checksum_payload = {
+          :command => command,
+          :version => version,
+          :certname => certname,
+          :payload => payload,
+        }
+      end
       # We use to_pson still here, to work around the support for shifting
       # binary data from a catalog to PuppetDB. Attempting to use to_json
       # we get to_json conversion errors:
@@ -40,7 +54,8 @@ class Puppet::Util::Puppetdb::Command
       #
       # This is roughly inline with how Puppet serializes for catalogs as of
       # Puppet 4.1.0. We need a better answer to non-utf8 data end-to-end.
-      }.to_pson, "Error encoding a '#{command}' command for host '#{certname}'")
+      @checksum_payload = Puppet::Util::Puppetdb::CharEncoding.utf8_string(checksum_payload.to_pson, "Error encoding a '#{command}' command for host '#{certname}'")
+
     end
     @command = Puppet::Util::Puppetdb::CharEncoding.coerce_to_utf8(command).gsub(" ", "_")
     @version = version
@@ -58,15 +73,21 @@ class Puppet::Util::Puppetdb::Command
     checksum = Digest::SHA1.hexdigest(checksum_payload)
 
     for_whom = " for #{certname}" if certname
-    params = "checksum=#{checksum}&version=#{version}&certname=#{certname}&command=#{command}&producer-timestamp=#{producer_timestamp_utc.iso8601(3)}"
     begin
       response = profile("Submit command HTTP post", [:puppetdb, :command, :submit]) do
-        Http.action("#{CommandsUrl}?#{params}", :command) do |http_instance, path|
-          req_headers = headers
-          # custom header used in PDB to reject large compressed commands and update the size metric
-          req_headers["X-Uncompressed-Length"] = payload.bytesize.to_s
-          http_instance.post(path, payload, req_headers, {:compress => :gzip,
-                                                          :metric_id => [:puppetdb, :command, command]})
+        if admin_cmd?
+          Http.action("#{AdminCommandsUrl}", :command) do |http_instance, path|
+            http_instance.post(path, payload, headers, {})
+          end
+        else
+          params = "checksum=#{checksum}&version=#{version}&certname=#{certname}&command=#{command}&producer-timestamp=#{producer_timestamp_utc.iso8601(3)}"
+          Http.action("#{CommandsUrl}?#{params}", :command) do |http_instance, path|
+            req_headers = headers
+            # custom header used in PDB to reject large compressed commands and update the size metric
+            req_headers["X-Uncompressed-Length"] = payload.bytesize.to_s
+            http_instance.post(path, payload, req_headers, {:compress => :gzip,
+                                                            :metric_id => [:puppetdb, :command, command]})
+          end
         end
       end
 
