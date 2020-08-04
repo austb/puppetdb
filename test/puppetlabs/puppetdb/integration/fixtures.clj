@@ -22,6 +22,16 @@
             [puppetlabs.puppetdb.utils :as utils])
   (:import [com.typesafe.config ConfigValueFactory]))
 
+(defn spy>>  [tag x]
+    (binding  [*out* *err*]
+          (clojure.pprint/pprint  [tag x]))
+      x)
+
+(defn spy>  [x tag]
+    (binding  [*out* *err*]
+          (clojure.pprint/pprint  [tag x]))
+      x)
+
 (defprotocol TestServer
   (server-info [this]))
 
@@ -185,7 +195,8 @@
                  (ks/deep-merge
                   {:main {:server_urls (->> pdb-servers
                                             (map (comp svc-utils/root-url-str :base-url server-info))
-                                            (clojure.string/join ","))}}
+                                            (clojure.string/join ",")
+                                            (spy>> :terminus-config))}}
                   (or overrides {})))))
 
 (defn run-puppet-server-as [node-name pdb-servers config-overrides]

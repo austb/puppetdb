@@ -312,7 +312,7 @@
              :test {:jvm-opts ~(if need-permgen?
                                  ;; integration tests cycle jruby a lot, which chews through permgen
                                  ^:replace ["-XX:MaxPermSize=500M"]
-                                 [])}
+                                 ["-Xmx16G"])}
              ; We only want to include bouncycastle in the FOSS uberjar.
              ; PE should be handled by selecting the proper bouncycastle jar
              ; at runtime (standard/fips)

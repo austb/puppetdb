@@ -27,21 +27,22 @@ class Puppet::Resource::Puppetdb < Puppet::Indirector::REST
       query_param = CGI.escape(expr.to_json)
 
       begin
-        response = Http.action("/pdb/query/v4/resources?query=#{query_param}", :query) do |http_instance, path|
-          profile("Resources query: #{URI.unescape(path)}",
+        response = Http.action("/pdb/query/v4/resources?query=#{query_param}", :query) do |http_instance, uri|
+          profile("Resources query: #{URI.unescape(uri.path)}",
                   [:puppetdb, :resource, :search, :query, request.key]) do
-            http_instance.get(path, headers, { :metric_id => [:puppetdb, :resource, :search] })
+            http_instance.get(uri, {headers: headers,
+                                    options: { :metric_id => [:puppetdb, :resource, :search] }})
           end
         end
 
         log_x_deprecation_header(response)
 
-        unless response.is_a? Net::HTTPSuccess
+        unless response.success?
           # Newline characters cause an HTTP error, so strip them
-          raise "[#{response.code} #{response.message}] #{response.body.gsub(/[\r\n]/, '')}"
+          raise Puppet::Error, "[#{response.code} #{response.reason}] #{response.body.gsub(/[\r\n]/, '')}"
         end
       rescue => e
-        raise Puppet::Error, "Could not retrieve resources from the PuppetDB at #{self.class.server}:#{self.class.port}: #{e}"
+        raise Puppet::Error, "Could not retrieve resources from the PuppetDB at  #{e}"
       end
 
       resources = profile("Parse resource query response (size: #{response.body.size})",
