@@ -109,6 +109,45 @@
 ;;; edges/resources in here and more of the codebase switched over to
 ;;; using the new schemas
 
+(def resource-ref-schema
+  {:type String
+   :title String})
+
+(def resource-wireformat-schema
+  (merge resource-ref-schema
+         {(s/optional-key :exported) Boolean
+          (s/optional-key :file) String
+          (s/optional-key :line) s/Int
+          (s/optional-key :tags) [String]
+          (s/optional-key :aliases) [String]
+          (s/optional-key :parameters) {s/Any s/Any}}))
+
+(def resource-schema
+  (merge resource-ref-schema
+         {(s/optional-key :exported) Boolean
+          (s/optional-key :file) String
+          (s/optional-key :line) s/Int
+          (s/optional-key :tags) #{String}
+          (s/optional-key :aliases) #{String}
+          (s/optional-key :parameters) {s/Any s/Any}}))
+
+(def resource-ref->resource-schema
+  {resource-ref-schema resource-schema})
+
+(def edge-relationship-wireformat-schema (s/enum "contains" "before" "required-by" "notifies" "subscription-of"))
+
+(def edge-wireformat-schema
+  {:source resource-ref-schema
+   :target resource-ref-schema
+   :relationship edge-relationship-wireformat-schema})
+
+(def edge-relationship-schema (s/enum :contains :before :required-by :notifies :subscription-of))
+
+(def edge-schema
+  {:source resource-ref-schema
+   :target resource-ref-schema
+   :relationship edge-relationship-schema})
+
 (def catalog-wireformat-schema
   "This flattened catalog schema is for the superset of catalog information.
    Use this when in the general case as it can be converted to any of the other
@@ -123,20 +162,13 @@
    :code_id (s/maybe s/Str)
    (s/optional-key :job_id) (s/maybe s/Str)
 
+   :edges [edge-wireformat-schema]
+   :resources [resource-wireformat-schema]})
 
-   ;; This is a crutch. We use sets for easier searching and avoid
-   ;; reliance on ordering. We should pick one of the below (probably
-   ;; set) and make the conversion earlier in the pipeline, then all
-   ;; code would rely on the edges to be in that format
-   :edges (s/cond-pre [{s/Any s/Any}]
-                      #{{s/Any s/Any}})
-
-   ;; This is a crutch, some areas of the code expect the first
-   ;; format, others expect the second, ideally we would make the
-   ;; transformation to the second earlier in the process, then all of
-   ;; the code can expect it (it's just a faster access version of the first)
-   :resources (s/cond-pre [{s/Any s/Any}]
-                          {s/Any {s/Any s/Any}})})
+(def catalog-schema
+  (assoc catalog-wireformat-schema
+         :edges #{edge-schema}
+         :resources resource-ref->resource-schema))
 
 (def catalog-v8-wireformat-schema
   (dissoc catalog-wireformat-schema :producer :job_id))
@@ -362,7 +394,7 @@
   "Function for validating v9- of the catalogs"
   [catalog]
   (->> catalog
-       (s/validate catalog-wireformat-schema)
+       (s/validate catalog-schema)
        validate-resources
        validate-edges))
 
@@ -447,6 +479,7 @@
   (->> catalog
        default-missing-keys
        transform
+       ;; TODO: this only strips top-level keys, we want to strip extra resource keys as well.
        (pls/strip-unknown-keys catalog-wireformat-schema)
        validate))
 

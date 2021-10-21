@@ -19,7 +19,7 @@
    likely result in dangling resources and catalogs; to clean these
    up, it's important to run `garbage-collect!`."
   (:require [murphy :refer [try!]]
-            [puppetlabs.puppetdb.catalogs :as cat]
+            [puppetlabs.puppetdb.catalogs :as cat :refer [edge-schema resource-ref->resource-schema resource-ref-schema]]
             [puppetlabs.puppetdb.reports :as reports]
             [puppetlabs.puppetdb.facts :as facts :refer [facts-schema]]
             [puppetlabs.kitchensink.core :as kitchensink]
@@ -60,39 +60,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Schemas
 
-(def resource-ref-schema
-  {:type String
-   :title String})
-
-(def json-primitive-schema (s/cond-pre String Number Boolean))
-
-(def resource-schema
-  (merge resource-ref-schema
-         {(s/optional-key :exported) Boolean
-          (s/optional-key :file) String
-          (s/optional-key :line) s/Int
-          (s/optional-key :tags) #{String}
-          (s/optional-key :aliases) #{String}
-          (s/optional-key :parameters) {s/Any s/Any}}))
-
-(def resource-ref->resource-schema
-  {resource-ref-schema resource-schema})
-
-(def edge-relationship-schema (s/enum :contains :before :required-by :notifies :subscription-of))
-
-(def edge-schema
-  {:source resource-ref-schema
-   :target resource-ref-schema
-   :relationship edge-relationship-schema})
-
-(def catalog-schema
-  "This is a bit of a hack to make a more restrictive schema in the storage layer.
-  Moving the more restrictive resource/edge schemas into puppetdb.catalogs is TODO. Upstream
-  code needs to assume a map of resources (not a vector) and tests need to be update to adhere
-  to the new format."
-  (assoc cat/catalog-wireformat-schema
-         :resources resource-ref->resource-schema
-         :edges #{edge-schema}))
+;; TODO: remove this additional schema
+(def catalog-schema cat/catalog-schema)
 
 (def environments-schema
   {:id s/Int
@@ -868,9 +837,9 @@
 (s/defn replace-catalog!
   "Persist the supplied catalog in the database, returning its
    similarity hash."
-  ([catalog :- catalog-schema]
+  ([catalog :- cat/catalog-schema]
    (replace-catalog! catalog (now)))
-  ([{:keys [producer_timestamp resources certname] :as catalog} :- catalog-schema
+  ([{:keys [producer_timestamp resources certname] :as catalog} :- cat/catalog-schema
     received-timestamp :- pls/Timestamp]
    (time! (get-storage-metric :replace-catalog)
           (jdbc/with-db-transaction []
