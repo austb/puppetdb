@@ -2107,9 +2107,17 @@
 
 (defn desired-schema-version
   "The newest migration this PuppetDB instance knows about.  Anything
-  newer is considered invalid as far as this instance is concerned."
+  newer is considered invalid as far as this instance is concerned. It
+  is not guaranteed that this branch has all migrations less than this version
+  as they may only be applied on a newer branch of PuppetDB."
   []
   (apply max (keys migrations)))
+
+(defn desired-schema-state
+  "The necessary schema state for this version of PuppetDB. Calculated as the
+  sum of all schema migration numbers"
+  []
+  (apply sum (keys migrations)))
 
 (defn record-migration!
   "Records a migration by storing its version in the schema_migrations table,
@@ -2150,10 +2158,16 @@
 
 (defn unrecognized-migrations
   "Returns a set of migrations, likely created by a future version of
-  PuppetDB"
+  PuppetDB, or migrations that are only on a newer branch."
   [applied-migrations]
-  (set/difference applied-migrations
-                  (set (range 0 (inc (desired-schema-version))))))
+  (let [known-migrations (keys migrations)]
+    (set/difference applied-migrations
+                    (set known-migrations)
+                    ;; This range accounts for past migration
+                    ;; roll-ups. PuppetDB's that have been continuously
+                    ;; upgraded from an old version may contain migrations
+                    ;; no longer in the migration map.
+                    (set (range 1 (min known-migrations))))))
 
 (defn require-valid-schema
   "Returns true if the database is ready for use, otherwise throws."

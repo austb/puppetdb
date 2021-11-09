@@ -68,7 +68,7 @@
             [puppetlabs.puppetdb.query-eng :as qeng]
             [puppetlabs.puppetdb.query.population :as pop]
             [puppetlabs.puppetdb.scf.migrate
-             :refer [desired-schema-version
+             :refer [desired-schema-state
                      initialize-schema
                      pending-migrations
                      require-valid-schema]]
@@ -746,32 +746,26 @@
 (defn check-schema-version
   [desired-version db service request-shutdown]
   {:pre [(integer? desired-version)]}
-  (let [schema-version (-> (jdbc/with-transacted-connection db
-                             (jdbc/query "select max(version) from schema_migrations"))
-                           first
-                           :max)
+  (let [unrecognized-migrations (migrate/unrcognized-migrations (applied-migrations))
+        pending-migrations (pending-migrations)
         stop (fn [msg status]
                (log/error msg)
                (request-shutdown {::tk/exit
                                   {:status status
                                    :messages [[msg *err*]]}}))]
-    (when-not (= schema-version desired-version)
-      (cond
-        (> schema-version desired-version)
-        (stop (str
-               (trs "Please upgrade PuppetDB: ")
-               (trs "your database contains schema migration {0} which is too new for this version of PuppetDB."
-                    schema-version))
-              (int \M))
+    (cond
+     (seq unrecognized-migrations)
+     (stop (str
+            (trs "Please upgrade PuppetDB: ")
+            (trs "your database contains schema migration {0} which is too new for this version of PuppetDB."
+                 (first (sort unrecognized-migrations))))
+           (int \M))
 
-        (< schema-version desired-version)
-        (stop (str
-               (trs "Please run PuppetDB with the migrate option set to true to upgrade your database. ")
-               (trs "The detected migration level {0} is out of date." schema-version))
-              (int \m))
-
-        :else
-        (throw (Exception. "Unknown state when checking schema versions"))))))
+     (seq pending-migrations)
+     (stop (str
+            (trs "Please run PuppetDB with the migrate option set to true to upgrade your database. ")
+            (trs "The detected migration level {0} is out of date." (first (sort pending-migrations))))
+           (int \m)))))
 
 (defn init-queue [config send-event! cmd-event-ch shutdown-for-ex]
   (let [stockdir (conf/stockpile-dir config)
@@ -799,7 +793,7 @@
 
 (defn init-write-dbs [databases]
   ;; FIXME: forbid subdb settings?
-  (with-final [desired-schema (desired-schema-version)
+  (with-final [desired-schema (desired-schema-state)
                db-names (vec (keys databases))
                pools (atom []) :error #(close-write-dbs (deref %))]
 
@@ -849,7 +843,7 @@
                               (str allocate-at-startup-at-least-mb)))
                (vec (repeatedly allocate-at-startup-at-least-mb
                                 #(long-array (* 1024 128))))) ;; ~1mb
-             (check-schema-version (desired-schema-version)
+             (check-schema-version (desired-schema-state)
                                    db service request-shutdown)
              (catch InterruptedException ex
                (log/info (trs "Schema checker interrupted")))))))
