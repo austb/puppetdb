@@ -2898,6 +2898,69 @@
   [v]
   (contains? #{"limit" "order_by" "offset"} (first v)))
 
+(defn validate-implicit-subquery
+  [query])
+(defn validate-subquery
+  "validate explicit subquery"
+  [query])
+(defn validate-filter-clause
+  "Validates filter clause if present, otherwise continues on to validate group by."
+  [query query-rec]
+  (cm/match query
+    [boolean-op (:guard "and" :or "or") & filters]
+    (map validate-filter-clause)
+    ;; add binary op guard
+    [op field value]
+
+    ["subquery" entity subquery-filter]
+    ;; validate that an implicit relationship exists
+    (let [query-rec (lookup-query-rec entity)]
+      (validate-filter-clause subquery-filter query-rec))
+
+    ["in" field-or-fields subquery]
+    ;;validate field(s)
+    (validate-subquery subquery)
+
+    
+
+    :else (validate-subquery query)
+    ))
+
+(defn validate-extract-clause
+  "Validates extract clause if present."
+  [query query-rec]
+  (cm/match query
+    ["extract" field-or-fields ["group_by" & group-by-fields]]
+    ;;validate field-or-fields
+    ;;validate group by fields
+    (validate-filter-clause remaining-query entity)  
+
+    ["extract" field-or-fields query-filter ["group_by" & group-by-fields]]
+    ;;validate field-or-fields
+    ;;validate group by fields
+    (validate-filter-clause remaining-query entity)  
+
+    ["extract" field-or-fields query-filter]
+    ;;validate field-or-fields
+    (validate-filter-clause remaining-query entity)
+
+    ;; TODO: Are the fields optional when using "extract"? if so, this could be a filter
+    ["extract" field-or-fields]
+    ;;validate field-or-fields
+
+    :else (validate-filter-clause query query-rec)))
+
+(defn validate-top-level-query
+  [query query-rec]
+  (cm/match query
+    ["from" (entity-str :guard #(string? %)) & remaining-query]
+    ;;validate entity-str
+    (validate-extract-clause remaining-query entity)
+    :else (throw (ex-info "Unrecognized form for top level query validation"
+                          {:kind ::validation-failure
+                           :data {:query query
+                                  :query-rec query-rec}}))))
+
 (defn parse-query-context
   "Parses a top-level query with a 'from', validates it and returns the entity and remaining-query in
    a map."
