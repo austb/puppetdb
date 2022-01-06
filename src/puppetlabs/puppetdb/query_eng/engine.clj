@@ -3332,6 +3332,7 @@
                                 (push-down-context query-rec)
                                 expand-user-query
                                 optimize-user-query
+                                ;; FIXME: restrict this to paging options, ttls are unecessary for this function
                                 (convert-to-plan query-rec validated-options)
                                 extract-all-params
                                 optimize-joins)]
