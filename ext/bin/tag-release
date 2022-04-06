@@ -78,11 +78,7 @@ misuse() {
   exit 2
 }
 
-expected_args=2
-if [[ $# -ne $expected_args ]]; then
-  echo "Wrong number of arguments $#, expected $expected_args" >&2
-  misuse
-fi
+test $# -eq 2 || misuse
 
 branch="$1"
 version="$2"
