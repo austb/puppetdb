@@ -100,21 +100,34 @@
          :when (:queryable? projection-value)]
      (keyword projection-key))))
 
+;; TODO remove url-prefix, it is entirely unused in the codebase
+(defn get-munge-fn
+  [entity version paging-options url-prefix]
+  (let [munge-fn (get-munge entity)]
+    (if (= (:explain paging-options) :analyze)
+      identity
+      (case entity
+        :event-counts
+        (munge-fn (:summarize_by paging-options) version url-prefix)
+
+        (munge-fn version url-prefix)))))
+
 (defn- regular-query->sql
   [query entity options]
-  (let [query-rec (cond
+  (let [entity (cond
                     ;; Move this so that we always look for
                     ;; include_facts_expiration (PDB-4586).
                     (and (:include_facts_expiration options)
                          (= entity :nodes))
-                    (get-in @entity-fn-idx [:nodes-with-fact-expiration :rec])
+                    :nodes-with-fact-expiration
 
                     (and (:include_package_inventory options)
                          (= entity :factsets))
-                    (get-in @entity-fn-idx [:factsets-with-packages :rec])
+                    :factsets-with-packages
 
-                    :else
-                    (get-in @entity-fn-idx [entity :rec]))
+                    :else entity)
+        query-rec (get-in @entity-fn-idx [entity :rec])
+        munge-fn (get-munge-fn entity nil options "")
         columns (orderable-columns query-rec)]
     (paging/validate-order-by! columns options)
     (if (:add-agent-report-filter options)
@@ -137,31 +150,40 @@
                           {:kind ::dr/unrecognized-ast-syntax
                            :ast query
                            :sql (eng/compile-user-query->sql query-rec query options)}))
-          (eng/compile-user-query->sql query-rec ast options)))
-      (eng/compile-user-query->sql query-rec query options))))
+          {:result (eng/compile-user-query->sql query-rec query options)
+           :munge-fn munge-fn}))
+      {:result (eng/compile-user-query->sql query-rec query options)
+       :munge-fn munge-fn})))
 
 (defn query->sql
   "Converts a vector-structured `query` to a corresponding SQL query which will
-   return nodes matching the `query`."
-  ([query entity version options]
-   (query->sql query entity version options nil))
-  ([query entity version options context]
+  return nodes matching the `query`. Also returns the proper munge-fn in the result
+  map which the caller must use to convert the result rows."
+  ([query version options]
+   (query->sql query version options nil))
+  ([query version options context]
    {:pre  [((some-fn nil? sequential?) query)]
     :post [(map? %)
            (jdbc/valid-jdbc-query? (:results-query %))
            (or (not (:include_total options))
                (jdbc/valid-jdbc-query? (:count-query %)))]}
-   (let [result (cond
+   (let [warn-experimental (get context :warn-experimental true)
+         {:keys [remaining-query entity]} (eng/parse-query-context query warn-experimental)
+         result (cond
                   (= :aggregate-event-counts entity)
-                  (aggregate-event-counts/query->sql version query options)
+                  (aggregate-event-counts/query->sql version remaining-query options)
 
                   (= :event-counts entity)
-                  (event-counts/query->sql version query options)
+                  (event-counts/query->sql version remaining-query options)
 
                   (and (= :events entity) (:distinct_resources options))
-                  (events/legacy-query->sql false version query options)
+                  (events/legacy-query->sql false version remaining-query options)
 
-                  :else (regular-query->sql query entity options))]
+                  :else nil)
+        {:keys [result munge-fn]}
+        (if result
+          {:result result :munge-fn (get-munge-fn entity version options "")}
+          (regular-query->sql remaining-query entity options))]
      (when (:log-queries context)
        (let [{[sql & params] :results-query} result]
          (log/infof "PDBQuery:%s:%s"
@@ -170,18 +192,7 @@
                                     :sql sql
                                     :params (vec params))
                         json/generate-string))))
-     result)))
-
-(defn get-munge-fn
-  [entity version paging-options url-prefix]
-  (let [munge-fn (get-munge entity)]
-    (if (= (:explain paging-options) :analyze)
-      identity
-      (case entity
-        :event-counts
-        (munge-fn (:summarize_by paging-options) version url-prefix)
-
-        (munge-fn version url-prefix)))))
+     (assoc result :munge-fn munge-fn))))
 
 (def use-preferred-streaming-method?
   (->> (or (System/getenv "PDB_USE_DEPRECATED_QUERY_STREAMING_METHOD") "yes")
@@ -215,22 +226,18 @@
          origin (:origin options)]
      (with-log-mdc ["pdb-query-id" query-id
                     "pdb-query-origin" origin]
-       (let [{:keys [scf-read-db url-prefix warn-experimental log-queries]
-              :or {warn-experimental true}} context
-             {:keys [remaining-query entity]} (eng/parse-query-context query warn-experimental)
-             munge-fn (get-munge-fn entity version options url-prefix)]
-
+       (let [{:keys [scf-read-db log-queries]} context]
          (when log-queries
            ;; Log origin and AST of incoming query
            (log/infof "PDBQuery:%s:%s"
                       query-id (-> (sorted-map :origin origin :ast query)
                                    json/generate-string)))
 
-         (let [f #(let [{:keys [results-query]}
-                        (query->sql remaining-query entity version
+         (let [f #(let [{:keys [results-query munge-fn]}
+                        (query->sql query version
                                     (merge options
                                            (select-keys context [:node-purge-ttl :add-agent-report-filter]))
-                                    (select-keys context [:log-queries :query-id]))]
+                                    (select-keys context [:warn-experimental :log-queries :query-id]))]
                     (jdbc/call-with-array-converted-query-rows results-query
                                                                (comp row-fn munge-fn)))]
            (if use-preferred-streaming-method?
@@ -250,27 +257,24 @@
     :else obj))
 
 (defn user-query->engine-query
-  ([version query-map options]
-   (user-query->engine-query version query-map options false))
-  ([_version query-map options warn-experimental]
-   (let [query (:query query-map)
+  [_version query-map options]
+  (let [query (:query query-map)
 
-         {:keys [remaining-query entity paging-clauses]}
-         (eng/parse-query-context query warn-experimental)
+        ;; TODO; this is doing extra work identifying the entity, etc
+        {:keys [paging-clauses]}
+        (eng/parse-query-context query false)
 
-         paging-options (some-> paging-clauses
-                                (rename-keys {:order-by :order_by})
-                                (update :order_by paging/munge-query-ordering)
-                                utils/strip-nil-values)
-         query-options (->> (dissoc query-map :query)
-                            utils/strip-nil-values
-                            (merge {:limit nil :offset nil :order_by nil}
-                                   options
-                                   paging-options))
-         entity (cond
-                  (and (= entity :factsets) (:include_package_inventory query-options)) :factsets-with-packages
-                  :else entity)]
-     {:query query :remaining-query remaining-query :entity entity :query-options query-options})))
+        paging-options (some-> paging-clauses
+                               (rename-keys {:order-by :order_by})
+                               (update :order_by paging/munge-query-ordering)
+                               utils/strip-nil-values)
+        query-options (->> (dissoc query-map :query)
+                           utils/strip-nil-values
+                           (merge {:limit nil :offset nil :order_by nil}
+                                  options
+                                  paging-options))]
+    ;; TODO query here still has paging clauses embedded as well, is that correct?
+    {:query query :query-options query-options}))
 
 (defn- generated-stream
   "Creates an InputStream connected to an OutputStream.  Runs (f
@@ -310,7 +314,7 @@
   if an exception happens before then.  An exception thrown by the
   future after that point will produce an exception from the next call
   to the InputStream read or close methods."
-  [db query entity version query-options munge-fn
+  [db query version query-options
    {:keys [pretty-print query-id] :as context}]
   ;; Client disconnects present as generic IOExceptions from the
   ;; output writer (via stream-json), and we just log them at debug
@@ -337,8 +341,8 @@
                       (try
                         (jdbc/with-db-connection db
                           (jdbc/with-db-transaction []
-                            (let [{:keys [results-query count-query]}
-                                  (query->sql query entity version query-options context)
+                            (let [{:keys [results-query count-query munge-fn]}
+                                  (query->sql query version query-options context)
                                   st (when count-query
                                        {:count (jdbc/get-result-count count-query)})
                                   stream-row (fn [row]
@@ -375,12 +379,10 @@
 
 (defn preferred-produce-streaming-body
   [version query-map context]
-  (let [{:keys [scf-read-db url-prefix warn-experimental log-queries query-id]
-         :or {warn-experimental true}} context
+  (let [{:keys [scf-read-db _url-prefix log-queries query-id]} context
         query-config (select-keys context [:node-purge-ttl :add-agent-report-filter])
-        {:keys [query remaining-query entity query-options]}
-        (user-query->engine-query version query-map query-config warn-experimental)]
-
+        {:keys [query query-options]}
+        (user-query->engine-query version query-map query-config)]
     (when log-queries
       ;; Log origin and AST of incoming query
       (let [{:keys [origin query]} query-map]
@@ -389,12 +391,11 @@
                                 json/generate-string))))
 
     (try
-      (let [munge-fn (get-munge-fn entity version query-options url-prefix)
-            stream-ctx (select-keys context [:log-queries :pretty-print :query-id])
+      (let [stream-ctx (select-keys context [:log-queries :pretty-print :query-id])
             {:keys [status stream]} (body-stream scf-read-db
-                                                 (coerce-from-json remaining-query)
-                                                 entity version query-options
-                                                 munge-fn
+                                                 query
+                                                 version
+                                                 query-options
                                                  stream-ctx)
             {:keys [count error]} @status]
         (when error
@@ -419,12 +420,10 @@
 
 (defn- deprecated-produce-streaming-body
   [version query-map context]
-  (let [{:keys [scf-read-db url-prefix warn-experimental pretty-print
-                log-queries query-id]
-         :or {warn-experimental true}} context
+  (let [{:keys [scf-read-db _url-prefix pretty-print log-queries query-id]} context
         query-config (select-keys context [:node-purge-ttl :add-agent-report-filter])
-        {:keys [query remaining-query entity query-options]}
-        (user-query->engine-query version query-map query-config warn-experimental)
+        {:keys [query query-options]}
+        (user-query->engine-query version query-map query-config)
         origin (:origin query-map)]
 
     (when log-queries
@@ -436,11 +435,11 @@
 
     (try
       (jdbc/with-transacted-connection scf-read-db
-        (let [munge-fn (get-munge-fn entity version query-options url-prefix)
-              {:keys [results-query count-query]}
-              (-> remaining-query
+        (let [{:keys [results-query count-query munge-fn]}
+              (-> query
                   coerce-from-json
-                  (query->sql entity version query-options
+                  (query->sql version query-options
+                              ;; TODO this is likely removing necessary parameters warn-experimental
                               (select-keys context [:log-queries :query-id])))
               query-error (promise)
               resp (http/streamed-response

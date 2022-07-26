@@ -435,10 +435,10 @@
 (defn valid-query?
   [scf-read-db version query-map query-options]
   (let [options (select-keys query-options [:node-purge-ttl :add-agent-report-filter])
-        {:keys [remaining-query entity query-options]}
+        {:keys [query query-options]}
         (qeng/user-query->engine-query version query-map options)]
     (jdbc/with-db-connection scf-read-db
-      (when (qeng/query->sql remaining-query entity version query-options)
+      (when (qeng/query->sql query version query-options)
         true))))
 
 (defn query-handler
