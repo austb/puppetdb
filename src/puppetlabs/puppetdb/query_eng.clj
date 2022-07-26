@@ -167,7 +167,14 @@
            (jdbc/valid-jdbc-query? (:results-query %))
            (or (not (:include_total options))
                (jdbc/valid-jdbc-query? (:count-query %)))]}
-   (let [warn-experimental (get context :warn-experimental true)
+   (let [{:keys [origin]} options
+         {:keys [warn-experimental log-queries query-id]} context
+         _ (when log-queries
+             ;; Log origin and AST of incoming query
+             (log/infof "PDBQuery:%s:%s"
+                        query-id (-> (sorted-map :origin origin :ast query)
+                                     json/generate-string)))
+
          {:keys [remaining-query entity]} (eng/parse-query-context query warn-experimental)
          result (cond
                   (= :aggregate-event-counts entity)
@@ -186,9 +193,10 @@
           (regular-query->sql remaining-query entity options))]
      (when (:log-queries context)
        (let [{[sql & params] :results-query} result]
+         ;; Log origin and the generated SQL & its parameters after processing
          (log/infof "PDBQuery:%s:%s"
-                    (:query-id context)
-                    (-> (sorted-map :origin (:origin options)
+                    query-id
+                    (-> (sorted-map :origin origin
                                     :sql sql
                                     :params (vec params))
                         json/generate-string))))
@@ -226,23 +234,17 @@
          origin (:origin options)]
      (with-log-mdc ["pdb-query-id" query-id
                     "pdb-query-origin" origin]
-       (let [{:keys [scf-read-db log-queries]} context]
-         (when log-queries
-           ;; Log origin and AST of incoming query
-           (log/infof "PDBQuery:%s:%s"
-                      query-id (-> (sorted-map :origin origin :ast query)
-                                   json/generate-string)))
-
-         (let [f #(let [{:keys [results-query munge-fn]}
-                        (query->sql query version
-                                    (merge options
-                                           (select-keys context [:node-purge-ttl :add-agent-report-filter]))
-                                    (select-keys context [:warn-experimental :log-queries :query-id]))]
-                    (jdbc/call-with-array-converted-query-rows results-query
-                                                               (comp row-fn munge-fn)))]
+       (let [{:keys [scf-read-db]} context
+             f #(let [{:keys [results-query munge-fn]}
+                      (query->sql query version
+                                  (merge options
+                                         (select-keys context [:node-purge-ttl :add-agent-report-filter]))
+                                  (select-keys context [:warn-experimental :log-queries :query-id]))]
+                  (jdbc/call-with-array-converted-query-rows results-query
+                                                             (comp row-fn munge-fn))) ]
            (if use-preferred-streaming-method?
              (jdbc/with-db-connection scf-read-db (jdbc/with-db-transaction [] (f)))
-             (jdbc/with-transacted-connection scf-read-db (f)))))))))
+             (jdbc/with-transacted-connection scf-read-db (f))))))))
 
 ;; Do we still need this, i.e. do we need the pass-through, and the
 ;; strict selectivity in the caller below?
@@ -379,17 +381,10 @@
 
 (defn preferred-produce-streaming-body
   [version query-map context]
-  (let [{:keys [scf-read-db _url-prefix log-queries query-id]} context
+  (let [{:keys [scf-read-db _url-prefix query-id]} context
         query-config (select-keys context [:node-purge-ttl :add-agent-report-filter])
         {:keys [query query-options]}
         (user-query->engine-query version query-map query-config)]
-    (when log-queries
-      ;; Log origin and AST of incoming query
-      (let [{:keys [origin query]} query-map]
-        (log/infof "PDBQuery:%s:%s"
-                   query-id (-> (sorted-map :origin origin :ast query)
-                                json/generate-string))))
-
     (try
       (let [stream-ctx (select-keys context [:log-queries :pretty-print :query-id])
             {:keys [status stream]} (body-stream scf-read-db
@@ -420,19 +415,11 @@
 
 (defn- deprecated-produce-streaming-body
   [version query-map context]
-  (let [{:keys [scf-read-db _url-prefix pretty-print log-queries query-id]} context
+  (let [{:keys [scf-read-db _url-prefix pretty-print query-id]} context
         query-config (select-keys context [:node-purge-ttl :add-agent-report-filter])
         {:keys [query query-options]}
         (user-query->engine-query version query-map query-config)
         origin (:origin query-map)]
-
-    (when log-queries
-      ;; Log origin and AST of incoming query
-      (let [query (:query query-map)]
-        (log/infof "PDBQuery:%s:%s"
-                   query-id (-> (sorted-map :origin origin :ast query)
-                                json/generate-string))))
-
     (try
       (jdbc/with-transacted-connection scf-read-db
         (let [{:keys [results-query count-query munge-fn]}
