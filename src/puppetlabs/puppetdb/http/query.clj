@@ -438,7 +438,10 @@
         {:keys [query query-options]}
         (qeng/user-query->engine-query version query-map options)]
     (jdbc/with-db-connection scf-read-db
-      (when (qeng/query->sql query version query-options)
+      ;; It is only ok here to pass an empty context because we only want to check
+      ;; if the query is valid. A query context would normally contain important fields
+      ;; like a universal query-id for log correlation.
+      (when (qeng/query->sql query version query-options {})
         true))))
 
 (defn query-handler

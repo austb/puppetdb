@@ -10,18 +10,12 @@
             [puppetlabs.puppetdb.http :as http]
             [puppetlabs.puppetdb.jdbc :as jdbc]
             [puppetlabs.puppetdb.query.aggregate-event-counts :as aggregate-event-counts]
-            [puppetlabs.puppetdb.query.edges :as edges]
             [puppetlabs.puppetdb.query.events :as events]
             [puppetlabs.puppetdb.query.event-counts :as event-counts]
-            [puppetlabs.puppetdb.query.facts :as facts]
-            [puppetlabs.puppetdb.query.fact-contents :as fact-contents]
-            [puppetlabs.puppetdb.query.resources :as resources]
-            [puppetlabs.puppetdb.query.catalog-inputs :as inputs]
             [puppetlabs.puppetdb.query-eng.default-reports :as dr]
             [puppetlabs.puppetdb.scf.storage-utils :as sutils]
             [puppetlabs.puppetdb.schema :as pls]
             [puppetlabs.puppetdb.utils :as utils :refer [with-log-mdc]]
-            [puppetlabs.puppetdb.utils.string-formatter :as formatter]
             [puppetlabs.puppetdb.query-eng.engine :as eng]
             [ring.util.io :as rio]
             [schema.core :as s])
@@ -32,175 +26,80 @@
    (org.postgresql.util PGobject PSQLException)
    (org.joda.time Period)))
 
-(def entity-fn-idx
-  (atom
-   {:aggregate-event-counts {:munge aggregate-event-counts/munge-result-rows
-                             :rec nil}
-    :event-counts {:munge event-counts/munge-result-rows
-                   :rec nil}
-    :inventory {:munge (constantly identity)
-                :rec eng/inventory-query}
-    :facts {:munge facts/munge-result-rows
-            :rec eng/facts-query}
-    :fact-contents {:munge fact-contents/munge-result-rows
-                    :rec eng/fact-contents-query}
-    :fact-paths {:munge facts/munge-path-result-rows
-                 :rec eng/fact-paths-query}
-    :fact-names {:munge facts/munge-name-result-rows
-                 :rec eng/fact-names-query}
-    :factsets {:munge (constantly identity)
-               :rec eng/factsets-query}
-    ;; Not a real entity, requested via query param
-    :factsets-with-packages {:munge facts/munge-package-inventory
-                             :rec eng/factsets-with-packages-query}
-    :catalogs {:munge (constantly identity)
-               :rec eng/catalog-query}
-    :catalog-input-contents {:munge (constantly identity)
-                             :rec eng/catalog-input-contents-query}
-    :catalog-inputs {:munge inputs/munge-catalog-inputs
-                             :rec eng/catalog-inputs-query}
-    :nodes {:munge (constantly identity)
-            :rec eng/nodes-query}
-    ;; Not a real entity name of course -- requested by query parameter.
-    :nodes-with-fact-expiration {:munge (constantly identity)
-                                 :rec eng/nodes-query-with-fact-expiration}
-    :environments {:munge (constantly identity)
-                   :rec eng/environments-query}
-    :producers {:munge (constantly identity)
-                :rec eng/producers-query}
-    :packages {:munge (constantly identity)
-               :rec eng/packages-query}
-    :package-inventory {:munge (constantly identity)
-                        :rec eng/package-inventory-query}
-    :events {:munge events/munge-result-rows
-             :rec eng/report-events-query}
-    :edges {:munge edges/munge-result-rows
-            :rec eng/edges-query}
-    :reports {:munge (constantly identity)
-              :rec eng/reports-query}
-    :report-metrics {:munge (constantly (comp :metrics first))
-                     :rec eng/report-metrics-query}
-    :report-logs {:munge (constantly (comp :logs first))
-                  :rec eng/report-logs-query}
-    :resources {:munge resources/munge-result-rows
-                :rec eng/resources-query}}))
-
-(defn get-munge
-  [entity]
-  (if-let [munge-result (get-in @entity-fn-idx [entity :munge])]
-    munge-result
-    (throw (IllegalArgumentException.
-            (tru "Invalid entity ''{0}'' in query"
-                 (formatter/dashes->underscores (name entity)))))))
-
-(defn orderable-columns
-  [query-rec]
-  (vec
-   (for [[projection-key projection-value] (:projections query-rec)
-         :when (:queryable? projection-value)]
-     (keyword projection-key))))
-
-;; TODO remove url-prefix, it is entirely unused in the codebase
-(defn get-munge-fn
-  [entity version paging-options url-prefix]
-  (let [munge-fn (get-munge entity)]
-    (if (= (:explain paging-options) :analyze)
-      identity
-      (case entity
-        :event-counts
-        (munge-fn (:summarize_by paging-options) version url-prefix)
-
-        (munge-fn version url-prefix)))))
-
 (defn- regular-query->sql
-  [query entity options]
-  (let [entity (cond
-                    ;; Move this so that we always look for
-                    ;; include_facts_expiration (PDB-4586).
-                    (and (:include_facts_expiration options)
-                         (= entity :nodes))
-                    :nodes-with-fact-expiration
-
-                    (and (:include_package_inventory options)
-                         (= entity :factsets))
-                    :factsets-with-packages
-
-                    :else entity)
-        query-rec (get-in @entity-fn-idx [entity :rec])
-        munge-fn (get-munge-fn entity nil options "")
-        columns (orderable-columns query-rec)]
-    (paging/validate-order-by! columns options)
-    (if (:add-agent-report-filter options)
-      (let [ast (try
-                  (dr/maybe-add-agent-report-filter-to-query query-rec query)
-                  (catch ExceptionInfo e
-                    (let [data (ex-data e)
-                          msg (.getMessage e)]
-                      (when (not= ::dr/unrecognized-ast-syntax (:kind data))
-                        (log/error e (trs "Unknown exception when processing ast to add report type filter(s)."))
-                        (throw e))
-                      (log/error e msg)
-                      {:type ::failed, :message msg}))
-                  (catch Exception e
-                    (log/error e (trs "Unknown exception when processing ast to add report type filter(s)."))
-                    (throw e)))]
-        (if (and (map? ast) (= (:type ast) ::failed))
-          (throw (ex-info (trs "AST validation failed, but was successfully converted to SQL. Please file a PuppetDB ticket at https://tickets.puppetlabs.com \n{0}"
-                               (:message ast))
-                          {:kind ::dr/unrecognized-ast-syntax
-                           :ast query
-                           :sql (eng/compile-user-query->sql query-rec query options)}))
-          {:result (eng/compile-user-query->sql query-rec query options)
-           :munge-fn munge-fn}))
-      {:result (eng/compile-user-query->sql query-rec query options)
-       :munge-fn munge-fn})))
+  [query options]
+  (if (:add-agent-report-filter options)
+    (let [ast (try
+                (dr/maybe-add-agent-report-filter-to-query query)
+                (catch ExceptionInfo e
+                  (let [data (ex-data e)
+                        msg (.getMessage e)]
+                    (when (not= ::dr/unrecognized-ast-syntax (:kind data))
+                      (log/error e (trs "Unknown exception when processing ast to add report type filter(s)."))
+                      (throw e))
+                    (log/error e msg)
+                    {:type ::failed, :message msg}))
+                (catch Exception e
+                  (log/error e (trs "Unknown exception when processing ast to add report type filter(s)."))
+                  (throw e)))]
+      (if (and (map? ast) (= (:type ast) ::failed))
+        (throw (ex-info (trs "AST validation failed, but was successfully converted to SQL. Please file a PuppetDB ticket at https://tickets.puppetlabs.com \n{0}"
+                             (:message ast))
+                        {:kind ::dr/unrecognized-ast-syntax
+                         :ast query
+                         :sql (eng/compile-query->sql query options)}))
+        (eng/compile-query->sql ast options)))
+    (eng/compile-query->sql query options)))
 
 (defn query->sql
   "Converts a vector-structured `query` to a corresponding SQL query which will
   return nodes matching the `query`. Also returns the proper munge-fn in the result
-  map which the caller must use to convert the result rows."
-  ([query version options]
-   (query->sql query version options nil))
-  ([query version options context]
-   {:pre  [((some-fn nil? sequential?) query)]
-    :post [(map? %)
-           (jdbc/valid-jdbc-query? (:results-query %))
-           (or (not (:include_total options))
-               (jdbc/valid-jdbc-query? (:count-query %)))]}
-   (let [{:keys [origin]} options
-         {:keys [warn-experimental log-queries query-id]} context
-         _ (when log-queries
-             ;; Log origin and AST of incoming query
-             (log/infof "PDBQuery:%s:%s"
-                        query-id (-> (sorted-map :origin origin :ast query)
-                                     json/generate-string)))
+  map which the caller must use to convert the result rows. `options` represent
+  the data necessary for constructing the proper SQL query such as paging
+  paging options, node-purge-ttl, and whether to add the default agent report
+  filter. `context` represents information useful for debugging not directly
+  involved in compiling a query, such as a universal `query-id` for correlating
+  log statements."
+  [query version options context]
+  {:pre  [((some-fn nil? sequential?) query)]
+   :post [(map? %)
+          (jdbc/valid-jdbc-query? (:results-query %))
+          (or (not (:include_total options))
+              (jdbc/valid-jdbc-query? (:count-query %)))]}
+  (let [{:keys [origin]} options
+        {:keys [warn-experimental log-queries query-id]} context
+        _ (when log-queries
+            ;; Log origin and AST of incoming query
+            (log/infof "PDBQuery:%s:%s"
+                       query-id (-> (sorted-map :origin origin :ast query)
+                                    json/generate-string)))
 
-         {:keys [remaining-query entity]} (eng/parse-query-context query warn-experimental)
-         result (cond
-                  (= :aggregate-event-counts entity)
-                  (aggregate-event-counts/query->sql version remaining-query options)
+        {:keys [remaining-query entity]} (eng/parse-query-context query warn-experimental)
+        legacy-query (cond
+                      (= :aggregate-event-counts entity)
+                      (aggregate-event-counts/query->sql version remaining-query options)
 
-                  (= :event-counts entity)
-                  (event-counts/query->sql version remaining-query options)
+                      (= :event-counts entity)
+                      (event-counts/query->sql version remaining-query options)
 
-                  (and (= :events entity) (:distinct_resources options))
-                  (events/legacy-query->sql false version remaining-query options)
+                      (and (= :events entity) (:distinct_resources options))
+                      (events/legacy-query->sql false version remaining-query options)
 
-                  :else nil)
-        {:keys [result munge-fn]}
-        (if result
-          {:result result :munge-fn (get-munge-fn entity version options "")}
-          (regular-query->sql remaining-query entity options))]
-     (when (:log-queries context)
-       (let [{[sql & params] :results-query} result]
-         ;; Log origin and the generated SQL & its parameters after processing
-         (log/infof "PDBQuery:%s:%s"
-                    query-id
-                    (-> (sorted-map :origin origin
-                                    :sql sql
-                                    :params (vec params))
-                        json/generate-string))))
-     (assoc result :munge-fn munge-fn))))
+                      :else nil)
+        {:keys [sql-query munge-fn]}
+        (if legacy-query
+          {:sql-query legacy-query :munge-fn (eng/get-munge-fn entity version options "")}
+          (regular-query->sql query options))]
+    (when (:log-queries context)
+      (let [{[sql & params] :results-query} sql-query]
+        ;; Log origin and the generated SQL & its parameters after processing
+        (log/infof "PDBQuery:%s:%s"
+                   query-id
+                   (-> (sorted-map :origin origin
+                                   :sql sql
+                                   :params (vec params))
+                       json/generate-string))))
+    (assoc sql-query :munge-fn munge-fn)))
 
 (def use-preferred-streaming-method?
   (->> (or (System/getenv "PDB_USE_DEPRECATED_QUERY_STREAMING_METHOD") "yes")

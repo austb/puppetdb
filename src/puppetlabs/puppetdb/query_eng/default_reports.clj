@@ -178,26 +178,37 @@
   [qrec (->> (maybe-add-agent-report-filter-to-subqueries ast)
              (maybe-restrict-expr-to-agent-reports qrec))])
 
+(defn maybe-add-agent-report-filter-to-extract
+  [qrec ast]
+  (cm/match
+   [ast]
+   ;; Top level 'extract' has had the preceding 'from' removed and it
+   ;; only valid at the very top level of the query, not in subqueries
+   [["extract" fields & (page-order-opts :guard is-page-order-opt?)]]
+   (let [[_ expr] (maybe-add-agent-report-filter qrec ::elide)]
+     (if (= ::elide expr)
+       `["extract" ~fields ~@page-order-opts]
+       `["extract" ~fields ~expr ~@page-order-opts]))
+
+   [["extract" fields expr & page-order-opts]]
+   (let [[_ expr] (maybe-add-agent-report-filter qrec expr)]
+     `["extract" ~fields ~expr ~@page-order-opts])
+
+   :else (second (maybe-add-agent-report-filter qrec ast))))
+
 ;; Public
 
 (defn maybe-add-agent-report-filter-to-query
-  [qrec ast]
+  [ast]
   (try
     (cm/match
-      [ast]
-      ;; Top level 'extract' has had the preceding 'from' removed and it
-      ;; only valid at the very top level of the query, not in subqueries
-      [["extract" fields & (page-order-opts :guard is-page-order-opt?)]]
-      (let [[_ expr] (maybe-add-agent-report-filter qrec ::elide)]
-        (if (= ::elide expr)
-          `["extract" ~fields ~@page-order-opts]
-          `["extract" ~fields ~expr ~@page-order-opts]))
+     [ast]
+     [["from" (entity-str :guard string?) & (page-order-opts :guard is-page-order-opt?) ]]
+       `["from" ~entity-str ~@page-order-opts]
 
-    [["extract" fields expr & page-order-opts]]
-    (let [[_ expr] (maybe-add-agent-report-filter qrec expr)]
-      `["extract" ~fields ~expr ~@page-order-opts])
-
-    :else (second (maybe-add-agent-report-filter qrec ast)))
+     [["from" (entity-str :guard string?) remaining-query & (page-order-opts :guard is-page-order-opt?) ]]
+     (let [expr (maybe-add-agent-report-filter-to-extract (qrec-for-entity entity-str) remaining-query)]
+       `["from" ~entity-str ~expr ~@page-order-opts]))
     (catch ExceptionInfo e
       (let [data (ex-data e)
             failed-ast-clause (:clause data)]

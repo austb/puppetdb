@@ -67,23 +67,3 @@
                        (concat common-params params)
                        (flatten (repeat nsummarized common-params)))]
     {:results-query (apply vector unioned-sql query-params)}))
-
-(defn- perform-query
-  "Given a SQL query and its parameters, return a vector of matching results."
-  [[sql & params]]
-  {:pre  [(string? sql)]
-   :post [(vector? %)]}
-  (jdbc/query-to-vec (apply vector sql params)))
-
-(defn munge-result-rows
-  [_ _]
-  (fn [rows]
-    (map (partial kitchensink/mapvals #(if (nil? %) 0 %)) rows)))
-
-(defn query-aggregate-event-counts
-  "Given a SQL query and its parameters, return the single matching result map."
-  [{:keys [results-query]}]
-  {:pre  [(string? (first results-query))]
-   :post [(seq? %)]}
-  (->> (perform-query results-query)
-       ((munge-result-rows nil nil))))

@@ -1,25 +1,11 @@
 (ns puppetlabs.puppetdb.query.events
   "SQL/query-related functions for events"
   (:require [clojure.string :as string]
-            [puppetlabs.puppetdb.cheshire :as json]
             [puppetlabs.puppetdb.jdbc :as jdbc]
             [puppetlabs.puppetdb.query :as query]
             [puppetlabs.puppetdb.query.paging :as paging]
             [puppetlabs.puppetdb.query-eng.engine :as qe]
-            [puppetlabs.puppetdb.schema :as pls]
-            [puppetlabs.puppetdb.utils :as utils]
             [puppetlabs.puppetdb.scf.storage-utils :as sutils]))
-
-;; MUNGE
-
-(pls/defn-validated munge-result-rows
-  "Returns a function that munges the resulting rows ready for final
-   presentation."
-  [_ _]
-  (fn [rows]
-    (map (comp #(utils/update-when % [:old_value] json/parse-string)
-               #(utils/update-when % [:new_value] json/parse-string))
-         rows)))
 
 ;; QUERY
 

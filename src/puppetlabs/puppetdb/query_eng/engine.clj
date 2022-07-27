@@ -12,7 +12,13 @@
             [puppetlabs.puppetdb.honeysql :as h]
             [puppetlabs.puppetdb.jdbc :as jdbc]
             [puppetlabs.puppetdb.query-eng.parse :as parse]
+            [puppetlabs.puppetdb.query-eng.munge :as munge]
             [puppetlabs.puppetdb.query.paging :as paging]
+            [puppetlabs.puppetdb.query.edges :as edges]
+            [puppetlabs.puppetdb.query.facts :as fact-helpers]
+            [puppetlabs.puppetdb.query.fact-contents :as fact-contents]
+            [puppetlabs.puppetdb.query.resources :as resources]
+            [puppetlabs.puppetdb.query.catalog-inputs :as inputs]
             [puppetlabs.puppetdb.utils :as utils]
             [puppetlabs.puppetdb.utils.string-formatter :as formatter]
             [puppetlabs.puppetdb.scf.storage-utils :as su]
@@ -1842,6 +1848,89 @@
 ;;; User Query - functions/transformations of the user defined query
 ;;;              language
 
+;; TODO I don't think this needs to be an atom?
+(def entity-fn-idx
+  (atom
+   {:aggregate-event-counts {:munge munge/aggregate-event-counts-result-row
+                             :rec nil}
+    :event-counts {:munge munge/event-counts-result-row
+                   :rec nil}
+    :inventory {:munge (constantly identity)
+                :rec inventory-query}
+    :facts {:munge fact-helpers/munge-result-rows
+            :rec facts-query}
+    :fact-contents {:munge fact-contents/munge-result-rows
+                    :rec fact-contents-query}
+    :fact-paths {:munge fact-helpers/munge-path-result-rows
+                 :rec fact-paths-query}
+    :fact-names {:munge fact-helpers/munge-name-result-rows
+                 :rec fact-names-query}
+    :factsets {:munge (constantly identity)
+               :rec factsets-query}
+    ;; Not a real entity, requested via query param
+    :factsets-with-packages {:munge fact-helpers/munge-package-inventory
+                             :rec factsets-with-packages-query}
+    :catalogs {:munge (constantly identity)
+               :rec catalog-query}
+    :catalog-input-contents {:munge (constantly identity)
+                             :rec catalog-input-contents-query}
+    :catalog-inputs {:munge inputs/munge-catalog-inputs
+                             :rec catalog-inputs-query}
+    :nodes {:munge (constantly identity)
+            :rec nodes-query}
+    ;; Not a real entity name of course -- requested by query parameter.
+    :nodes-with-fact-expiration {:munge (constantly identity)
+                                 :rec nodes-query-with-fact-expiration}
+    :environments {:munge (constantly identity)
+                   :rec environments-query}
+    :producers {:munge (constantly identity)
+                :rec producers-query}
+    :packages {:munge (constantly identity)
+               :rec packages-query}
+    :package-inventory {:munge (constantly identity)
+                        :rec package-inventory-query}
+    :events {:munge munge/events-result-row
+             :rec report-events-query}
+    :edges {:munge edges/munge-result-rows
+            :rec edges-query}
+    :reports {:munge (constantly identity)
+              :rec reports-query}
+    :report-metrics {:munge (constantly (comp :metrics first))
+                     :rec report-metrics-query}
+    :report-logs {:munge (constantly (comp :logs first))
+                  :rec report-logs-query}
+    :resources {:munge resources/munge-result-rows
+                :rec resources-query}}))
+
+(defn get-munge
+  [entity]
+  (if-let [munge-result (get-in @entity-fn-idx [entity :munge])]
+    munge-result
+    (throw (IllegalArgumentException.
+            (tru "Invalid entity ''{0}'' in query"
+                 (formatter/dashes->underscores (name entity)))))))
+
+;; TODO remove url-prefix, it is entirely unused in the codebase
+(defn get-munge-fn
+  [entity version paging-options url-prefix]
+  (let [munge-fn (get-munge entity)]
+    (if (= (:explain paging-options) :analyze)
+      identity
+      (case entity
+        :event-counts
+        (munge-fn (:summarize_by paging-options) version url-prefix)
+
+        (munge-fn version url-prefix)))))
+
+(defn orderable-columns
+  [query-rec]
+  (vec
+   (for [[projection-key projection-value] (:projections query-rec)
+         :when (:queryable? projection-value)]
+     (keyword projection-key))))
+
+
+;; TODO this may be redundant with the above
 (def user-name->query-rec-name
   {"select_catalogs" catalog-query
    "select_catalog_input_contents" catalog-input-contents-query
@@ -3338,6 +3427,7 @@
                                     (apply vector (jdbc/count-sql sql)
                                            params)))))))
 
+;; TODO remove this once it is no longer used by the event-counts queries
 (defn compile-user-query->sql
   "Given a user provided query and a Query instance, convert the
    user provided query to SQL and extract the parameters, to be used
@@ -3346,3 +3436,62 @@
    (compile-query query-rec user-query {} :sql))
   ([query-rec user-query options]
    (compile-query query-rec user-query options :sql)))
+
+(defn compile-query->sql
+  "Given an AST query and query options create an SQL query. Returns {:sql
+  {:results-query [sql & params], :munge-fn row-munge-fn}. If requested by
+  include_total, :sql will include a second query under :count-query to perform
+  the count. Callers must use munge-fn to convert the returned rows to the
+  proper format."
+  [query options]
+  (cm/match
+   query
+   ["from" (entity-str :guard string?) & remaining-query]
+   (let [entity (keyword (formatter/underscores->dashes entity-str))
+         entity (cond
+                 ;; Move this so that we always look for
+                 ;; include_facts_expiration (PDB-4586).
+                 (and (:include_facts_expiration options)
+                      (= entity :nodes))
+                 :nodes-with-fact-expiration
+
+                 (and (:include_package_inventory options)
+                      (= entity :factsets))
+                 :factsets-with-packages
+
+                 :else entity)
+
+         query-rec (get-in @entity-fn-idx [entity :rec] ::no-query-rec)
+         munge-fn (get-munge-fn entity nil options "")
+         {:keys [query paging-clauses]}
+         (cm/match
+          remaining-query
+
+          [(c :guard paging-clause?) & clauses]
+          (let [paging-clauses (create-paging-map (cons c clauses))] ;; TODO make sure clauses gets full validation
+            {:paging-clauses paging-clauses :query []})
+
+          [(q :guard vector?)]
+          {:query q}
+
+          [(q :guard vector?) & clauses]
+          (let [paging-clauses (create-paging-map clauses)]
+            {:query q :paging-clauses paging-clauses})
+
+          []
+          {:query []}
+
+          :else (throw
+                 (IllegalArgumentException.
+                  (str
+                   (tru "Your `from` query accepts an optional query only as a second argument.")
+                   " "
+                   (tru "Check your query and try again.")))))
+         columns (orderable-columns query-rec)
+         ;; TODO likely need more logic here for combining the maps, unless options map is heavily
+         ;; processed in query_eng
+         options (merge options (utils/strip-nil-values paging-clauses))]
+     ;; TODO - does the field also need to be extracted to be used by order-by?
+     (paging/validate-order-by! columns options)
+     {:sql-query (compile-query query-rec query options :sql)
+      :munge-fn munge-fn})))

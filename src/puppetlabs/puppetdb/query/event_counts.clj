@@ -4,7 +4,6 @@
             [puppetlabs.puppetdb.jdbc :as jdbc]
             [puppetlabs.puppetdb.query :as query]
             [puppetlabs.puppetdb.query.paging :as paging]
-            [puppetlabs.kitchensink.core :as kitchensink]
             [puppetlabs.puppetdb.query-eng.engine :as qe]
             [puppetlabs.puppetdb.scf.storage :refer [store-corrective-change?]]
             [puppetlabs.i18n.core :refer [tru]]))
@@ -95,43 +94,6 @@
   (if where
     (format "SELECT * FROM (%s) count_results WHERE %s" sql where)
     sql))
-
-(defn- munge-subject
-  "Helper function to transform the event count subject data from the raw format that we get back from the
-  database into the more structured format that the API specifies."
-  [summarize_by result]
-  {:pre [(contains? #{"certname" "resource" "containing_class"} summarize_by)
-         (map? result)
-         (or
-          (contains? result :certname)
-          (every? #(contains? result %) [:resource_type :resource_title])
-          (contains? result :containing_class))]
-   :post [(map? %)
-          (not (kitchensink/contains-some % [:certname :resource_type :resource_title :containing_class]))
-          (map? (:subject %))
-          (= summarize_by (:subject_type %))]}
-  (condp = summarize_by
-    "certname"          (-> result
-                            (assoc :subject_type "certname")
-                            (assoc :subject {:title (:certname result)})
-                            (dissoc :certname))
-
-    "resource"          (-> result
-                            (assoc :subject_type "resource")
-                            (assoc :subject {:type (:resource_type result) :title (:resource_title result)})
-                            (dissoc :resource_type :resource_title))
-
-    "containing_class"  (-> result
-                            (assoc :subject_type "containing_class")
-                            (assoc :subject {:title (:containing_class result)})
-                            (dissoc :containing_class))))
-
-(defn munge-result-rows
-  "Helper function to transform the event count subject data from the raw format that we get back from the
-   database into the more structured format that the API specifies."
-  [summarize_by _ _]
-  (fn [rows]
-    (map (partial munge-subject summarize_by) rows)))
 
 (defn query->sql
   "Convert an event-counts `query` and a value to `summarize_by` into a SQL string.

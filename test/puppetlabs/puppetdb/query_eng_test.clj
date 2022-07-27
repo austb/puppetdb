@@ -24,8 +24,8 @@
             plan->sql
             push-down-context
             reports-query
-            resources-query]]
-   [puppetlabs.puppetdb.query-eng :refer [entity-fn-idx]]
+            resources-query
+            entity-fn-idx]]
    [puppetlabs.puppetdb.jdbc :refer [with-transacted-connection]]
    [puppetlabs.puppetdb.testutils :refer [get-request parse-result]]
    [puppetlabs.puppetdb.testutils.db :refer [*db* with-test-db]]
