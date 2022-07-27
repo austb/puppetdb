@@ -2223,6 +2223,19 @@
 
             :else nil))
 
+
+(defn paging-clause?
+  [v]
+  (contains? #{"limit" "order_by" "offset"} (first v)))
+
+(defn validate-paging-operators!
+  "Given a list of possible clauses check that they are all valid paging operators"
+  [clauses]
+  (when-let [unrecognized (seq (filter (comp not paging-clause?) clauses))]
+    (throw (IllegalArgumentException.
+            (tru "Invalid paging clause(s) ''{0}'' in query"
+                 (pr unrecognized))))))
+
 (defn validate-query-entity!
   "Throw an IllegalArgumentException when entity is unrecognized."
   [entity]
@@ -2381,8 +2394,8 @@
       (if (vector? clause) (mapv keyword clause) (keyword clause)))))
 
 (defn create-paging-map
-  "Given a list of clauses [['limit'1 1] ['offset' 1], etc], convert to a map
-   {:limit 1 :offset 1}"
+  "Given a list of clauses [['limit' 1] ['offset' 1], etc], convert to a map
+  {:limit 1 :offset 1}."
   [clauses]
   {:limit (get-clause "limit" clauses)
    :offset (get-clause "offset" clauses)
@@ -3078,10 +3091,6 @@
     (log/warn (trs "The {0} entity is experimental and may be altered or removed in the future."
                    (name entity)))))
 
-(defn paging-clause?
-  [v]
-  (contains? #{"limit" "order_by" "offset"} (first v)))
-
 (defn parse-query-context
   "Parses a top-level query with a 'from', validates it and returns the entity and remaining-query in
    a map."
@@ -3400,10 +3409,8 @@
   [query-rec user-query {:keys [include_total explain] :as options} target]
   ;; Call the query-rec so we can evaluate query-rec functions
   ;; which depend on the db connection type
-  (let [allowed-fields (map keyword (queryable-fields query-rec))
-        validated-options (some->> options
-                                (paging/validate-order-by! allowed-fields)
-                                (paging/dealias-order-by query-rec))
+  (let [validated-options (some->> options
+                                   (paging/dealias-order-by query-rec))
         [query-rec user-query] (rewrite-fact-query query-rec user-query)
         optimize-joins (if (or always-enable-drop-unused-joins?
                                ;; Why paging-options?  See PDB-1936
@@ -3437,6 +3444,38 @@
   ([query-rec user-query options]
    (compile-query query-rec user-query options :sql)))
 
+(defn compile-paging-clauses
+  "Compile paging clauses returns as a map of query and paging-clauses. Validation
+  is the responsibility of the caller and is **not** done in this function because
+  paging clauses can be specifed as query parameters as well. The user query,
+  if present, is returned unchanged."
+  [remaining-query]
+  (cm/match
+   remaining-query
+
+   [(_c :guard paging-clause?) & _clauses]
+   (let [_ (validate-paging-operators! remaining-query)
+         paging-clauses (create-paging-map remaining-query)]
+     {:paging-clauses paging-clauses :query []})
+
+   [(q :guard vector?)]
+   {:query q}
+
+   [(q :guard vector?) & clauses]
+   (let [_ (validate-paging-operators! clauses)
+         paging-clauses (create-paging-map clauses)]
+     {:query q :paging-clauses paging-clauses})
+
+   []
+   {:query []}
+
+   :else (throw
+          (IllegalArgumentException.
+           (str
+            (tru "Your `from` query accepts an optional query only as a second argument.")
+            " "
+            (tru "Check your query and try again."))))))
+
 (defn compile-query->sql
   "Given an AST query and query options create an SQL query. Returns {:sql
   {:results-query [sql & params], :munge-fn row-munge-fn}. If requested by
@@ -3464,35 +3503,13 @@
 
          query-rec (get-in @entity-fn-idx [entity :rec] ::no-query-rec)
          munge-fn (get-munge-fn entity nil options "")
-         {:keys [query paging-clauses]}
-         (cm/match
-          remaining-query
+         allowed-order-by-fields (orderable-columns query-rec)
 
-          [(c :guard paging-clause?) & clauses]
-          (let [paging-clauses (create-paging-map (cons c clauses))] ;; TODO make sure clauses gets full validation
-            {:paging-clauses paging-clauses :query []})
-
-          [(q :guard vector?)]
-          {:query q}
-
-          [(q :guard vector?) & clauses]
-          (let [paging-clauses (create-paging-map clauses)]
-            {:query q :paging-clauses paging-clauses})
-
-          []
-          {:query []}
-
-          :else (throw
-                 (IllegalArgumentException.
-                  (str
-                   (tru "Your `from` query accepts an optional query only as a second argument.")
-                   " "
-                   (tru "Check your query and try again.")))))
-         columns (orderable-columns query-rec)
-         ;; TODO likely need more logic here for combining the maps, unless options map is heavily
-         ;; processed in query_eng
+         {:keys [query paging-clauses]} (compile-paging-clauses remaining-query)
          options (merge options (utils/strip-nil-values paging-clauses))]
-     ;; TODO - does the field also need to be extracted to be used by order-by?
-     (paging/validate-order-by! columns options)
+     ;; Validate paging options after merging with query options because they
+     ;; can be specified either in the query or in the options
+     (paging/validate-limit-offset! options)
+     (paging/validate-order-by! allowed-order-by-fields options)
      {:sql-query (compile-query query-rec query options :sql)
       :munge-fn munge-fn})))

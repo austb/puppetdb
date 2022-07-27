@@ -233,6 +233,17 @@
                     (string/join "', '" (map name columns)))))))
   paging-options)
 
+(defn validate-limit-offset!
+  "Validate that the limit and offset parameters are numbers, or nil. Throws an
+  exception if validation fails"
+  [{:keys [limit offset] :as paging-options}]
+  (when-not (or (or (nil? limit)  (number? limit))
+                (or (nil? offset) (number? offset)))
+    (throw (IllegalArgumentException.
+            (tru "Arguments to limit and offset paging clauses must be numbers"))))
+  paging-options)
+
+
 (defn dealias-order-by
   [{:keys [projections] :as _query-rec} paging-options]
   (let [alias-map (->> projections
