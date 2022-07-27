@@ -1902,18 +1902,10 @@
     :resources {:munge resources/munge-result-rows
                 :rec resources-query}}))
 
-(defn get-munge
-  [entity]
-  (if-let [munge-result (get-in @entity-fn-idx [entity :munge])]
-    munge-result
-    (throw (IllegalArgumentException.
-            (tru "Invalid entity ''{0}'' in query"
-                 (formatter/dashes->underscores (name entity)))))))
-
 ;; TODO remove url-prefix, it is entirely unused in the codebase
 (defn get-munge-fn
   [entity version paging-options url-prefix]
-  (let [munge-fn (get-munge entity)]
+  (let [munge-fn (get-in @entity-fn-idx [entity :munge])]
     (if (= (:explain paging-options) :analyze)
       identity
       (case entity
@@ -2230,6 +2222,14 @@
             (into [] (remove removeable-clause? clauses))
 
             :else nil))
+
+(defn validate-query-entity!
+  "Throw an IllegalArgumentException when entity is unrecognized."
+  [entity]
+  (when-not (get @entity-fn-idx entity)
+    (throw (IllegalArgumentException.
+            (tru "Invalid entity ''{0}'' in query"
+                 (formatter/dashes->underscores (name entity)))))))
 
 (defn validate-binary-operators
   "Validation of the user provided query"
@@ -3460,6 +3460,7 @@
                  :factsets-with-packages
 
                  :else entity)
+         _ (validate-query-entity! entity)
 
          query-rec (get-in @entity-fn-idx [entity :rec] ::no-query-rec)
          munge-fn (get-munge-fn entity nil options "")
