@@ -7,6 +7,7 @@
             [honeysql.core :as hcore]
             [honeysql.helpers :as hsql]
             [honeysql.types :as htypes]
+            [honeysql.format :as hformat]
             [puppetlabs.kitchensink.core :as ks]
             [puppetlabs.puppetdb.facts :as facts]
             [puppetlabs.puppetdb.honeysql :as h]
@@ -1573,17 +1574,14 @@
   (-plan->sql [{:keys [group-by projected-fields subquery? where] :as query}
                {:keys [node-purge-ttl] :as options}]
     (s/validate [projection-schema] projected-fields)
-    (let [has-where? (boolean where)
-          sql (cond-> query
-                has-where? (update :selection #(hsql/merge-where % (-plan->sql where options)))
-                true sql-select-for-query
-                (not subquery?) (wrap-with-node-state-cte node-purge-ttl)
-                group-by (assoc :group-by group-by)
-                true (hcore/format :allow-dashed-names? true)
-                true first)]
-      (if (:subquery? query)
-        (htypes/raw (str " ( " sql " ) "))
-        sql)))
+    (let [has-where? (boolean where)]
+      ;; Build honeysql for query
+      (cond-> query
+        has-where? (update :selection #(hsql/merge-where % (-plan->sql where options)))
+        true sql-select-for-query
+        (not subquery?) (wrap-with-node-state-cte node-purge-ttl)
+        group-by (assoc :group-by group-by)
+        (not subquery?) (hformat/format :allow-dashed-names? true))))
 
   InExpression
   (-plan->sql [{:keys [column subquery]} options]
@@ -1826,17 +1824,6 @@
          (:selection-params node))
     {:node node
      :state (apply conj (:selection-params node) state)}))
-
-(defn extract-all-params
-  "Zip through the query plan, replacing each user provided query parameter with '?'
-  and return the parameters as a vector"
-  [plan]
-  (let [{:keys [node state]} (zip/post-order-visit (zip/tree-zipper plan)
-                                                   []
-                                                   [extract-params])]
-    {:plan node
-     :params state}))
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; User Query - functions/transformations of the user defined query
@@ -2963,14 +2950,13 @@
      ;; and thus still have no results.
      (let [fact-name (name-constraint clause)]
        [(update facts-query :selection assoc
-                :from [[(hcore/raw (str "(select certname,"
-                                        "        environment_id, "
-                                        "        ?::text as key, "
-                                        "        (stable||volatile)->? as value"
-                                        " from factsets"
-                                        " where (stable||volatile) ?? ?"
-                                        ")"))
-                        :fs]]
+                :from [[{:select [:certname
+                                  :environment_id
+                                  [fact-name :key]
+                                  [(jdbc/create-json-path-extraction "(stable||volatile)" [fact-name]) :value]]
+                         :from [:factsets]
+                         :where (htypes/raw (str "(stable||volatile) ?? " (jdbc/single-quote fact-name)))} :fs]]
+                ;; TODO this is unused
                 :selection-params [fact-name fact-name fact-name])
         user-query])
      :else
@@ -3217,13 +3203,13 @@
                ::why :missing-join-deps-information})))
     (apply set/union required-joins)))
 
-(defn maybe-drop-unused-joins [{:keys [plan] :as incoming}]
+(defn maybe-drop-unused-joins [plan]
   ;; Right now, this only looks at top-level joins.  Only enable this
   ;; for joins where we "know" it's OK.
   (if-not (:can-drop-unused-joins? plan)
     (do
       (log/debug (trs "Not dropping unused joins from query (disallowed)"))
-      incoming)
+      plan)
     ;; {:projections
     ;;  {"latest_report_corrective_change"
     ;;   {:type :boolean,
@@ -3247,7 +3233,7 @@
       (let [proj-reqs (required-by-projections plan)]
         (if (and (empty? proj-reqs)
                  (empty? (:call plan)))
-          incoming
+          plan
           (let [where-reqs (extract-where-deps plan)
                 function-reqs (extract-function-deps plan)
                 required? (set/union proj-reqs where-reqs function-reqs)
@@ -3280,14 +3266,13 @@
                                                             (partition 2 v)))))))
                 selection (reduce-kv drop-joins
                                      (:selection plan)
-                                     (:selection plan))
-                result (assoc plan :selection selection)]
-            (assoc incoming :plan result))))
+                                     (:selection plan))]
+            (assoc plan :selection selection))))
       (catch ExceptionInfo ex
         (if (= ::cannot-drop-joins (:kind (ex-data ex)))
           (do
             (log/debug (str ex))
-            incoming)
+            plan)
           (throw ex))))))
 
 (def default-explain-form
@@ -3298,6 +3283,15 @@
     (str default-explain-form query)
     query))
 
+(defn spy>> [tag x]
+  (binding [*out* *err*]
+    (clojure.pprint/pprint [tag x]))
+  x)
+
+(defn spy> [x tag]
+  (binding [*out* *err*]
+    (clojure.pprint/pprint [tag x]))
+  x)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Public
 
@@ -3321,17 +3315,16 @@
                                (:optimize_drop_unused_joins validated-options))
                          maybe-drop-unused-joins
                          identity)
-        parameterized-plan (->> user-query
-                                (push-down-context query-rec)
-                                expand-user-query
-                                optimize-user-query
-                                (convert-to-plan query-rec validated-options)
-                                extract-all-params
-                                optimize-joins)]
+        plan (->> user-query
+                  (push-down-context query-rec)
+                  expand-user-query
+                  optimize-user-query
+                  (convert-to-plan query-rec validated-options)
+                  optimize-joins
+                  (spy>> :plan))]
     (case target
-      :parameterized-plan parameterized-plan
-      :sql (let [{:keys [plan params]} parameterized-plan
-                 sql (plan->sql plan validated-options)
+      :parameterized-plan {:plan plan :params []}
+      :sql (let [[sql & params] (spy>> :generated (plan->sql plan validated-options))
                  paged-sql (wrap-with-explain (jdbc/paged-sql sql validated-options) explain)]
              (cond-> {:results-query (apply vector paged-sql params)}
                include_total (assoc :count-query

@@ -15,7 +15,7 @@
             compile-query
             compile-user-query->sql
             expand-user-query
-            extract-all-params
+            ; extract-all-params
             fact-contents-query
             facts-query
             inventory-query
@@ -80,21 +80,21 @@
            map->Query
            (plan->sql {:node-purge-ttl (parse-period "14d")})))))
 
-(deftest test-extract-params
+; (deftest test-extract-params
 
-  (are [expected plan] (= expected (extract-all-params plan))
+;   (are [expected plan] (= expected (extract-all-params plan))
 
-       {:plan (->AndExpression [(->BinaryExpression "="  "foo" "?")
-                                (->RegexExpression "bar" "?")
-                                (->NotExpression (->BinaryExpression "=" "baz" "?"))])
-        :params ["1" "2" "3"]}
-       (->AndExpression [(->BinaryExpression "=" "foo" "1")
-                         (->RegexExpression "bar" "2")
-                         (->NotExpression (->BinaryExpression "=" "baz" "3"))])
+;        {:plan (->AndExpression [(->BinaryExpression "="  "foo" "?")
+;                                 (->RegexExpression "bar" "?")
+;                                 (->NotExpression (->BinaryExpression "=" "baz" "?"))])
+;         :params ["1" "2" "3"]}
+;        (->AndExpression [(->BinaryExpression "=" "foo" "1")
+;                          (->RegexExpression "bar" "2")
+;                          (->NotExpression (->BinaryExpression "=" "baz" "3"))])
 
-       {:plan (map->Query {:where (->BinaryExpression "=" "foo" "?")})
-        :params ["1"]}
-       (map->Query {:where (->BinaryExpression "=" "foo" "1")})))
+;        {:plan (map->Query {:where (->BinaryExpression "=" "foo" "?")})
+;         :params ["1"]}
+;        (map->Query {:where (->BinaryExpression "=" "foo" "1")})))
 
 (deftest test-expand-user-query
   (is (= [["=" "prop" "foo"]]
