@@ -236,7 +236,7 @@
 (defn dealias-order-by
   [{:keys [projections] :as _query-rec} paging-options]
   (let [alias-map (->> projections
-                       (kitchensink/mapvals (comp h/extract-sql :field))
+                       (kitchensink/mapvals (comp h/extract-sql :field)) ;; FIXME: still using old honeysql
                        (kitchensink/mapkeys keyword))
         rename-field (fn [order-by-pair]
                        (update order-by-pair 0 (partial get alias-map)))]

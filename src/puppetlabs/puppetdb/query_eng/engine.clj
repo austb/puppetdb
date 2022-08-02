@@ -4,9 +4,9 @@
             [clojure.string :as str]
             [puppetlabs.i18n.core :refer [tru trs]]
             [clojure.tools.logging :as log]
-            [honeysql.core :as hcore]
-            [honeysql.helpers :as hsql]
-            [honeysql.types :as htypes]
+            [honey.sql :as sql]
+            [honey.sql.helpers :as hsql]
+            [honey.sql.pg-ops] ;; require to enable postgres ops
             [puppetlabs.kitchensink.core :as ks]
             [puppetlabs.puppetdb.facts :as facts]
             [puppetlabs.puppetdb.honeysql :as h]
@@ -23,9 +23,17 @@
             [clojure.walk :as walk])
   (:import
    (clojure.lang ExceptionInfo)
-   [honeysql.types SqlCall SqlRaw]
    [org.postgresql.util PGobject]))
 
+(defn spy>> [tag x]
+  (binding [*out* *err*]
+    (clojure.pprint/pprint [tag x]))
+  x)
+
+(defn spy> [x tag]
+  (binding [*out* *err*]
+    (clojure.pprint/pprint [tag x]))
+  x)
 ;; Queries must opt-in to the drop-joins optimization, and even then,
 ;; it's not yet necessarily safe if the query has top-level
 ;; aggregates.  Before opting in, we should feel confident that
@@ -49,7 +57,7 @@
 ;;; Plan - functions/transformations of the internal query plan
 
 (def field-schema (s/cond-pre s/Keyword
-                              SqlCall SqlRaw
+                              [s/Any] ;; TODO: allow array of keywords, and [:raw s/Str]
                               {:select s/Any s/Any s/Any}))
 
 ; The use of 'column' here is a misnomer. This refers to the result of
@@ -59,7 +67,7 @@
 (def certname-relations
   {"factsets" {:columns ["certname"]}
    "reports" {:columns ["certname"]}
-   "package-inventory" {:columns ["certname"]}
+   "package-inventory"  {:columns ["certname"]}
    "inventory" {:columns ["certname"]}
    "catalogs" {:columns ["certname"]}
    "catalog_input_contents" {:columns ["certname"]}
@@ -72,27 +80,35 @@
    "resources" {:columns ["certname"]}
    "certname_fact_expiration" {:columns ["certid"]}})
 
+(defn raw
+  [c]
+  (conj [:raw] c))
+
+(defn inline
+  [c]
+  (conj [:inline] c))
+
 (def type-coercion-matrix
   {:string {:numeric (su/sql-cast "int")
             :boolean (su/sql-cast "bool")
-            :string hcore/raw
+            :string (fn [s] (keyword s))
             :jsonb-scalar (su/sql-cast "jsonb")
             :timestamp (su/sql-cast "timestamptz")}
    :jsonb-scalar {:numeric (su/jsonb-scalar-cast "numeric")
-                  :jsonb-scalar hcore/raw
+                  :jsonb-scalar keyword
                   :boolean (comp (su/sql-cast "boolean") (su/sql-cast "text"))
                   :string (su/jsonb-scalar-cast "text")}
-   :encoded-path {:encoded-path hcore/raw}
-   :path-array {:path-array hcore/raw}
-   :json {:json hcore/raw}
+   :encoded-path {:encoded-path keyword}
+   :path-array {:path-array keyword}
+   :json {:json keyword}
    :boolean {:string (su/sql-cast "text")
-             :boolean hcore/raw}
+             :boolean keyword}
    :numeric {:string (su/sql-cast "text")
-             :numeric hcore/raw}
+             :numeric keyword}
    :timestamp {:string (su/sql-cast "text")
-               :timestamp hcore/raw}
-   :array {:array hcore/raw}
-   :queryable-json {:queryable-json hcore/raw}})
+               :timestamp keyword}
+   :array {:array keyword}
+   :queryable-json {:queryable-json keyword}})
 
 (defn convert-type
   [column from to]
@@ -229,11 +245,11 @@
   (->> column-keyword
        name
        su/sql-hash-as-str
-       hcore/raw))
+       raw))
 
 (defn hsql-hash-as-href
   [entity parent child]
-  (hcore/raw (str "format("
+  (raw (str "format("
                   (str "'/pdb/query/v4/" (name parent) "/%s/" (name child) "'")
                   ", "
                   entity
@@ -241,7 +257,7 @@
 
 (defn hsql-uuid-as-str
   [column-keyword]
-  (-> column-keyword name (str "::text") hcore/raw))
+  [:cast column-keyword :text])
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -266,29 +282,29 @@
                              "facts" {:type :queryable-json
                                       :projectable-json? true
                                       :queryable? true
-                                      :field (hcore/raw "(fs.stable||fs.volatile)")
+                                      :field [:raw "(fs.stable||fs.volatile)"]
                                       :field-type :raw
                                       :join-deps #{:fs}}
                              "trusted" {:type :queryable-json
                                         :projectable-json? true
                                         :queryable? true
-                                        :field (hcore/raw "(fs.stable||fs.volatile)->'trusted'")
+                                        :field [:raw "(fs.stable||fs.volatile)->'trusted'"]
                                         :field-type :raw
                                         :join-deps #{:fs}}}
 
                :selection {:from [[:factsets :fs]]
                            :left-join [:environments
-                                       [:= :fs.environment_id :environments.id]
+                                         [:= :fs.environment_id :environments.id]
 
-                                       :certnames
-                                       [:= :fs.certname :certnames.certname]]}
+                                         :certnames
+                                         [:= :fs.certname :certnames.certname]]}
 
-               :alias "inventory"
-               :relationships certname-relations
+                 :alias "inventory"
+                 :relationships certname-relations
 
-               :dotted-fields ["facts\\..*" "trusted\\..*"]
-               :entity :inventory
-               :subquery? false}))
+                 :dotted-fields ["facts\\..*" "trusted\\..*"]
+                 :entity :inventory
+                 :subquery? false}))
 
 (def nodes-query-base
   {::which-query :nodes
@@ -403,7 +419,7 @@
                   (assoc-in [:projections "expires_facts"]
                             {:type :boolean
                              :queryable? true
-                             :field (hcore/raw "coalesce(certname_fact_expiration.expire, true)")
+                             :field [:raw "coalesce(certname_fact_expiration.expire, true)"]
                              :join-deps #{:certname_fact_expiration}})
                   (assoc-in [:projections "expires_facts_updated"]
                             {:type :timestamp
@@ -458,7 +474,7 @@
                :selection {:from [[:fact_paths :fp]]
                            :left-join [[:value_types :vt]
                                        [:= :fp.value_type_id :vt.id]]
-                           :where [:!= :fp.value_type_id (hcore/inline 5)]}
+                           :where [:!= :fp.value_type_id [:inline 5]]}
 
                :relationships {;; Children - direct
                                "facts" {:columns ["name"]}
@@ -500,11 +516,11 @@
                                       :queryable? true
                                       :field :fs.value
                                       :join-deps #{:fs}}}
-               :selection {:from [[(hcore/raw
+               :selection {:from [[[:raw
                                     (str "(select certname,"
                                          "        environment_id,"
                                          "        (jsonb_each((stable||volatile))).*"
-                                         "  from factsets)"))
+                                         "  from factsets)")]
                                    :fs]]
                            :left-join [[:environments :env]
                                        [:= :fs.environment_id :env.id]]}
@@ -592,7 +608,7 @@
                                       :queryable? true
                                       :field :value
                                       :join-deps #{:fc}}}
-               :selection {:from [[(hcore/raw fact-contents-core) :fc]]
+               :selection {:from [[[:raw fact-contents-core] :fc]]
                            :left-join [[:environments :env]
                                        [:= :fc.environment_id :env.id]]}
 
@@ -777,8 +793,8 @@
                                                     :re.resource_title
                                                     :re.property
                                                     :re.corrective_change
-                                                    (h/scast :re.new_value :jsonb)
-                                                    (h/scast :re.old_value :jsonb)
+                                                    [(h/scast :re.new_value :jsonb)]
+                                                    [(h/scast :re.old_value :jsonb)]
                                                     :re.message
                                                     :re.file
                                                     :re.line
@@ -976,7 +992,7 @@
                :join-deps #{:ci}}}
     :selection {:from [:certnames]
                 :join [[{:select [:certname_id
-                                  [(hcore/raw "array_agg(array[catalog_inputs.type, name])") :inputs]]
+                                  [[:raw "array_agg(array[catalog_inputs.type, name])"] :inputs]]
                          :from [:catalog_inputs]
                          :group-by [:certname_id]} :ci]
                        [:= :certnames.id :ci.certname_id]]
@@ -1349,12 +1365,12 @@
     "facts" {:type :queryable-json
              :queryable? true
              :field {:select [(h/row-to-json :facts_data)]
-                     :from [[{:select [[(hcore/raw "json_agg(json_build_object('name', t.name, 'value', t.value))")
+                     :from [[{:select [[[:raw "json_agg(json_build_object('name', t.name, 'value', t.value))"]
                                         :data]
                                        [(hsql-hash-as-href "fs.certname" :factsets :facts)
                                         :href]]
                               :from [[{:select [[:key :name] :value :fs.certname]
-                                       :from [(hcore/raw "jsonb_each(fs.volatile || fs.stable)")]}
+                                       :from [[[:raw "jsonb_each(fs.volatile || fs.stable)"]]]}
                                       :t]]}
                              :facts_data]]}
              :join-deps #{:fs}}
@@ -1416,10 +1432,10 @@
           :certnames
           [:= :certnames.certname :fs.certname]
           [{:select [[:certname_packages.certname_id :certname_id]
-                     [:%array_agg.p.triple :packages]]
+                     [[:array_agg :p.triple] :packages]]
             :from [:certname_packages]
             :left-join [[{:select [:id
-                                  [(htypes/array [:name :version :provider]) :triple]]
+                                  [[:array [:name :version :provider]] :triple]]
                          :from [:packages]} :p]
                         [:= :p.id :certname_packages.package_id]]
             :group-by [:certname_id]} :package_inventory]
@@ -1465,24 +1481,23 @@
   ([expr]
    (compile-fnexpression expr true))
   ([{:keys [function column params]} alias?]
-   (let [honeysql-fncall (apply hcore/call function (cons column params))]
-     (hcore/format (if alias?
-                     [honeysql-fncall (get pg-fns->pdb-fns function)]
-                     honeysql-fncall)))))
+   [(if alias?
+     (into [(keyword function) column] params)
+     (into [function column] params)) (get pg-fns->pdb-fns function)]))
 
 (defn wrap-with-node-state-cte
   "Wrap a selection in a CTE representing expired or deactivated certnames"
   [selection node-purge-ttl]
   (let [timestamp (-> node-purge-ttl t/ago t/to-string)]
-    (assoc selection :with {:inactive_nodes {:select [:certname]
+    (assoc selection :with {:inactive_nodes {:select [[:certname]]
                                              :from [:certnames]
                                              ;; Since we use our own bespoke parameter extraction, we cannot use any parameters
                                              ;; in this wrapping honeysql cte, so we have to format the string ourselves.
                                              ;; If we can switch to using honeysql for parameter extraction, we can define this
                                              ;; filter in honeysql and let it convert the timestamps to SQL.
-                                             :where (hcore/raw
+                                             :where [:raw
                                                       (str "(deactivated IS NOT NULL AND deactivated > '" timestamp "')"
-                                                           " OR (expired IS NOT NULL and expired > '" timestamp "')"))}
+                                                           " OR (expired IS NOT NULL and expired > '" timestamp "')")]}
                             :not_active_nodes {:select [:certname]
                                            :from [:certnames]
                                            :where [:or
@@ -1495,7 +1510,8 @@
     (throw (IllegalArgumentException.
             (tru "Projected field name ''{0}'' exceeds current maximum length of 63 characters"
                  (count projection) projection))))
-  (jdbc/double-quote projection))
+  #_(jdbc/double-quote projection)
+  projection)
 
 (defn include-projection-dependencies
   "Returns projections after adding any dependencies of its memebers,
@@ -1535,19 +1551,22 @@
   i.e. {:select expr}."
   [{:keys [projected-fields call selection projections] :as _query}]
   ;; This is where we finally fully expand the projections.
-  (let [calls (mapv (comp hcore/raw :statement) call)
+  (let [calls (mapv :statement call)
         non-call-projections (if (and (empty? calls) (empty? projected-fields))
                                projections
-                               projected-fields)]
-    (assoc selection
-           :select (->> non-call-projections
-                        (remove (comp :unprojectable? second))
-                        ;; Currently this does not support deps for
-                        ;; projected functions i.e. :calls.
-                        (include-projection-dependencies projections)
-                        (mapv (fn [[name {:keys [field]}]]
-                                [field (quote-projections name)]))
-                        (into calls)))))
+                               projected-fields)
+        ;; map honeysql v1 distinct modifier to honeysqlv2 :select-distinct
+        select-distinct (some #{:distinct} (selection :modifiers))
+        select (if select-distinct :select-distinct :select)]
+    (assoc (dissoc selection :modifiers) ;; honeysql v2 rejects unrecognized keys
+           select (->> non-call-projections
+                       (remove (comp :unprojectable? second))
+                       ;; Currently this does not support deps for
+                       ;; projected functions i.e. :calls.
+                       (include-projection-dependencies projections)
+                       (mapv (fn [[name {:keys [field]}]]
+                               [field (quote-projections name)]))
+                       (into calls)))))
 
 (defn fn-binary-expression->hsql
   "Produce a predicate that compares the result of a function against a
@@ -1560,29 +1579,40 @@
           "to_char" [(jdbc/double-quote (first args)) (jdbc/single-quote (second args))]
           (throw (IllegalArgumentException. (tru "{0} is not a valid function"
                                                  (pr-str function)))))]
-    (hcore/raw (format "%s(%s) %s ?"
-                       function
-                       (str/join ", " quoted-args)
-                       op))))
+    [:raw (format "%s(%s) %s ?"
+                  function
+                  (str/join ", " quoted-args)
+                  op)]))
+
+(defn munge-query-ordering
+  [clauses]
+  (for [c clauses]
+    (if (vector? c)
+      (update c 1 {:ascending :asc :descending :desc})
+      [c :asc])))
 
 (defprotocol SQLGen
   (-plan->sql [query options] "Given the `query` plan node, convert it to a SQL string"))
 
 (extend-protocol SQLGen
   Query
-  (-plan->sql [{:keys [group-by projected-fields subquery? where] :as query}
+  (-plan->sql [{:keys [limit offset order-by group-by projected-fields subquery? where] :as query}
                {:keys [node-purge-ttl] :as options}]
     (s/validate [projection-schema] projected-fields)
     (let [has-where? (boolean where)
           sql (cond-> query
-                has-where? (update :selection #(hsql/merge-where % (-plan->sql where options)))
+                has-where? (update :selection #(hsql/where % (-plan->sql where options)))
                 true sql-select-for-query
+                true (dissoc :selection-params) ;; honeysql v2 disallows unrecognized keys
                 (not subquery?) (wrap-with-node-state-cte node-purge-ttl)
                 group-by (assoc :group-by group-by)
-                true (hcore/format :allow-dashed-names? true)
+                limit (assoc :limit limit)
+                offset (assoc :offset offset)
+                order-by (assoc :order-by order-by)
+                true (sql/format :allow-dashed-names? true)
                 true first)]
       (if (:subquery? query)
-        (htypes/raw (str " ( " sql " ) "))
+        [:raw (str " ( " sql " ) ")]
         sql)))
 
   InExpression
@@ -1596,21 +1626,21 @@
           inner-columns (map first projected-fields)
           inner-types (map (comp :type second) projected-fields)
           coercions (mapv convert-type inner-columns inner-types outer-types)]
-      [:in fields
-       {:select coercions
+      [:in (into [:composite] fields)
+       {:select (mapv (fn [v] (if (keyword? v) v [v])) coercions) ;; FIXME: hackery to get properly nested raw & function calls
         :from [[(-plan->sql subquery options) :sub]]}]))
 
   JsonContainsExpression
   (-plan->sql [{:keys [field column-data array-in-path]} _opts]
-    (let [f (if (instance? SqlRaw (:field column-data))
-              (-> column-data :field :s)
+    (let [f (if (= :raw (:field-type column-data))
+              (-> column-data :field second)
               field)]
       ;; This distinction is necessary (at least) because @> cannot
       ;; traverse into arrays, but should be otherwise preferred
       ;; because it can use an index.
       (if array-in-path
-        (hcore/raw (format "%s #> ? = ?" f))
-        (hcore/raw (format "%s @> ?" f)))))
+        [:raw (format "%s #> ? = ?" f)]
+        [:raw (format "%s @> ?" f)])))
 
   FnBinaryExpression
   (-plan->sql [{:keys [function args operator]} _opts]
@@ -1619,8 +1649,8 @@
   JsonbPathBinaryExpression
   (-plan->sql [{:keys [field value column-data operator]} _opts]
     (su/jsonb-path-binary-expression operator
-                                     (if (instance? SqlRaw (:field column-data))
-                                       (-> column-data :field :s)
+                                     (if (= :raw (:field-type column-data))
+                                       (-> column-data :field second)
                                        field)
                                      value))
 
@@ -1640,14 +1670,14 @@
                 (utils/vector-maybe value))))
 
   InArrayExpression
-  (-plan->sql [{:keys [column]} _opts]
+  (-plan->sql [{:keys [column value]} _opts]
     (s/validate column-schema column)
-    (su/sql-in-array (:field column)))
+    (su/sql-in-array (:field column) value))
 
   ArrayBinaryExpression
   (-plan->sql [{:keys [column]} _opts]
     (s/validate column-schema column)
-    (su/sql-array-query-string (:field column)))
+    (su/sql-array-query-string-v2 (:field column)))
 
   RegexExpression
   (-plan->sql [{:keys [column]} _opts]
@@ -1657,7 +1687,7 @@
   ArrayRegexExpression
   (-plan->sql [{:keys [column]} _opts]
     (s/validate column-schema column)
-    (su/sql-regexp-array-match (:field column)))
+    (su/sql-regexp-array-match-v2 (:field column)))
 
   PathArrayMatch
   (-plan->sql [{:keys [column path]} _opts]
@@ -1678,7 +1708,7 @@
     (s/validate column-schema column)
     (let [queryable-json? (= :queryable-json (:type column))
           lhs (if queryable-json?
-                (name (h/extract-sql (:field column)))
+                (name (h/extract-sql-v2 (:field column)))
                 (-plan->sql (:field column) options))
           json? (or queryable-json? (= :jsonb-scalar (:type column)))]
       (if (:null? expr)
@@ -2226,18 +2256,18 @@
   (let [stringify (fn [{:keys [field field-type]}]
                     (case field-type
                       :keyword (name field)
-                      :raw (:s field)
+                      :raw (second field)
                       (throw (IllegalArgumentException.
                               (tru "Cannot determine field type for field ''{0}''" field)))))]
     {:type :json
      :queryable? false
-     :field (hcore/raw
+     :field [:raw
              (jdbc/create-json-path-extraction
               ;; Extract the original field as a string
               (-> top :name projections stringify)
               (map #(case (:kind %)
                       ::parse/named-field-part (:name %))
-                   path)))
+                   path))]
      ;; json-path will be something like ("facts" "kernel" ...)
      :join-deps (get-in projections [(:name top) :join-deps])}))
 
@@ -2302,8 +2332,8 @@
 (defn update-selection
   [query-rec offset limit order-by]
   (cond-> query-rec
-    offset (assoc-in [:selection :offset] (hcore/inline offset))
-    limit (assoc-in [:selection :limit] (hcore/inline limit))
+    offset (assoc-in [:selection :offset] [:inline offset])
+    limit (assoc-in [:selection :limit] [:inline limit])
     order-by (assoc-in [:selection :order-by] order-by)))
 
 (pls/defn-validated create-from-node
@@ -2339,7 +2369,7 @@
                :join-deps join-deps
                :params (vec params)
                :args (vec qmarks)}
-        compiled-fn (first (compile-fnexpression fnmap))]
+        compiled-fn (compile-fnexpression fnmap)]
     (map->FnExpression (-> fnmap
                            (assoc :statement compiled-fn)))))
 
@@ -2606,10 +2636,10 @@
                   cinfo (get-in query-rec [:projections (:name top)])]
               (if (and (= :queryable-json (:type cinfo))
                        (seq path))
-                (let [field (name (h/extract-sql (:field cinfo)))
+                (let [field (name (h/extract-sql-v2 (spy>> :null-field (:field cinfo))))
                       json-path (->> (map :name path)
                                      (jdbc/create-json-path-extraction field)
-                                     hcore/raw)]
+                                     raw)]
                   (map->NullExpression {:column (assoc cinfo :field json-path)
                                         :null? value}))
                 (map->NullExpression {:column cinfo :null? value})))
@@ -2963,13 +2993,13 @@
      ;; and thus still have no results.
      (let [fact-name (name-constraint clause)]
        [(update facts-query :selection assoc
-                :from [[(hcore/raw (str "(select certname,"
+                :from [[[:raw (str "(select certname,"
                                         "        environment_id, "
                                         "        ?::text as key, "
                                         "        (stable||volatile)->? as value"
                                         " from factsets"
                                         " where (stable||volatile) ?? ?"
-                                        ")"))
+                                        ")")]
                         :fs]]
                 :selection-params [fact-name fact-name fact-name])
         user-query])
@@ -3331,11 +3361,19 @@
     (case target
       :parameterized-plan parameterized-plan
       :sql (let [{:keys [plan params]} parameterized-plan
-                 sql (plan->sql plan validated-options)
-                 paged-sql (wrap-with-explain (jdbc/paged-sql sql validated-options) explain)]
+                 {:keys [limit offset order_by]} validated-options
+                 paged-plan (cond-> plan
+                                limit (assoc :limit [:inline limit])
+                                offset (assoc :offset [:inline offset])
+                                ;; TODO: switching from underscore to dash here is ugly, move it to user-parameter handling in query_eng  
+                                (seq order_by) (assoc :order-by (munge-query-ordering order_by)))
+                 paged-sql (wrap-with-explain (plan->sql paged-plan validated-options) explain)
+                 ;; This plan omits limit/offset so that it gets a full count of the results
+                 ;; it omits order-by because it is unecessary for a count-only query.
+                 count-sql (plan->sql plan validated-options)]
              (cond-> {:results-query (apply vector paged-sql params)}
                include_total (assoc :count-query
-                                    (apply vector (jdbc/count-sql sql)
+                                    (apply vector (jdbc/count-sql count-sql)
                                            params)))))))
 
 (defn compile-user-query->sql

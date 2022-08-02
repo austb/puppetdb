@@ -3,7 +3,6 @@
             [clojure.java.jdbc :as sql]
             [clojure.tools.logging :as log]
             [honeysql.core :as hcore]
-            [honeysql.format :as hfmt]
             [clojure.string :as str]
             [puppetlabs.i18n.core :refer [trs tru]]
             [puppetlabs.puppetdb.cheshire :as json]
@@ -194,6 +193,10 @@
   [column]
   (format "(%s ~ ? AND %s IS NOT NULL)" column column))
 
+(defn raw
+  [c]
+  (conj [:raw] c))
+
 (defn sql-as-numeric
   "Returns the SQL for converting the given column to a number, or to
   NULL if it is not numeric."
@@ -219,6 +222,18 @@
   which must be supplied as the value to be matched."
   [column]
   (hcore/raw
+   (format "ARRAY[?::text] <@ %s" (name column))))
+
+(defn sql-array-query-string-v2
+  "Returns an SQL fragment representing a query for a single value
+  being found in an array column in the database.
+
+    (str \"SELECT ... WHERE \" (sql-array-query-string \"column_name\"))
+
+  The returned SQL fragment will contain *one* parameter placeholder,
+  which must be supplied as the value to be matched."
+  [column]
+  (raw
    (format "ARRAY[?::text] <@ %s" (name column))))
 
 (defn ast-path-type-sig
@@ -266,7 +281,7 @@
              " and "
              sig-col " = " sig
              ")")
-        hcore/raw)))
+        raw)))
 
 (defn path-array-col-matches-any-ast-path
   ;; ((path = array['w', 'x', '0', '1', 'y'] and type = 'ssiss')
@@ -287,7 +302,7 @@
                        arrays sigs)
                   (str/join " or "))
              ")")
-        hcore/raw)))
+        raw)))
 
 (defn path-array-col-matches-rx-vec
   [column sig-col path-rx]
@@ -315,7 +330,7 @@
                                  column
                                  (inc i)
                                  (-> rx ast->db jdbc/single-quote)))]
-    (hcore/raw
+    (raw
      (str "(case when array_length(" column ", 1) = " (count path-rx) "\n"
           "   then " sig-col " like " sig
           (apply str
@@ -339,23 +354,30 @@
   (hcore/raw
    (format "EXISTS(SELECT 1 FROM UNNEST(%s) WHERE UNNEST ~ ?)" (name column))))
 
+(defn sql-regexp-array-match-v2
+  "Returns SQL for performing a regexp match against the contents of
+  an array. If any of the array's items match the supplied regexp,
+  then that satisfies the match."
+  [column]
+  (raw
+   (format "EXISTS(SELECT 1 FROM UNNEST(%s) WHERE UNNEST ~ ?)" (name column))))
+
 (defn sql-cast
   [type]
   (fn [column]
     (if (= type "jsonb")
-      (hcore/raw (format "to_jsonb(%s)" column))
-      (hcore/raw (format "CAST(%s AS %s)" column type)))))
+      [[:to_jsonb (keyword column)]] ;; TODO: is there a better way to get to proper column name?
+      [[:cast column (keyword type)]]))) ;; TODO: can we just make the types keywords in the type conversion matrix?
 
 (defn jsonb-null?
   "A predicate determining whether the json types of a jsonb column are null."
   [column null?]
   (let [op (if null? "=" "<>")]
-    (hcore/raw (format "jsonb_typeof(%s) %s 'null'" (name column) op))))
+    (raw (format "jsonb_typeof(%s) %s 'null'" (name column) op))))
 
 (defn sql-in-array
-  [column]
-  (hcore/raw
-   (format "%s = ANY(?)" (first (hfmt/format column)))))
+  [column value]
+   [:= column [:any value]]) ;; assumes that this has already been converted a string array representation
 
 (defn jsonb-path-binary-expression
   "Produce a predicate that compares against nested value with op and checks the
@@ -368,11 +390,11 @@
           path (apply str
                       (str/join "->" (butlast path-elts))
                       (when-let [x (last path-elts)] ["->>" x]))]
-      (hcore/raw (str/join \space
+      (raw (str/join \space
                            [(str "(" path ")") (name op) "(?#>>'{}')"
                             "and" column "??" "?"])))
     (let [delimited-qmarks (str/join "->" qmarks)]
-      (hcore/raw (str/join \space
+      (raw (str/join \space
                            [(str "(" column "->" delimited-qmarks ")")
                             (name op) "?"
                             "and" column "??" "?"])))))
@@ -381,13 +403,13 @@
   [typ]
   (fn
     [column]
-    (hcore/raw (format "(%s#>>'{}')::%s" column typ))))
+    (raw (format "(%s#>>'{}')::%s" column typ))))
 
 (defn jsonb-scalar-regex
   "Produce a predicate that matches a regex against a scalar jsonb value "
   [column]
   ;; This gets the unwrapped json value as text
-  (hcore/raw (format "(%s#>>'{}')::text ~ ?" column)))
+  (raw (format "(%s#>>'{}')::text ~ ?" column)))
 
 (defn db-serialize
   "Serialize `value` into a form appropriate for querying against a

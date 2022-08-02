@@ -4,6 +4,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [puppetlabs.kitchensink.core :as kitchensink]
+            [honey.sql :as hsql]
             [puppetlabs.puppetdb.time :as pl-time]
             [puppetlabs.puppetdb.jdbc.internal :refer [limit-result-set!]]
             [puppetlabs.puppetdb.schema :as pls :refer [defn-validated]]
@@ -356,14 +357,15 @@
      {:pre [((some-fn string? vector?) sql-query-and-params)]}
      (limited-query-to-vec 0 sql-query-and-params)))
 
+;; FIXME: honeysql should be fully capable of handling our ordering terms
 (defn order-by-term->sql
   "Given a list of legal result columns and a map containing a single order_by term,
   return the SQL string representing this term for use in an ORDER BY clause."
   [[field order]]
-  {:pre [(keyword? field)
+  {:pre [(or (keyword? field) (and (seq field) (keyword? (second field))))
          (contains? #{:ascending :descending} order)]
    :post [(string? %)]}
-  (str (name field)
+  (str (if (keyword? field) (name field) (hsql/format field))
        (when (= order :descending) " DESC")))
 
 (defn escape-single-quotes
@@ -423,6 +425,7 @@
                ;; prefix for the first arrow in field->'key1'...
                (str "->")))))
 
+;; TODO this should be removed once it is handled by honeysql
 (pls/defn-validated paged-sql :- String
   "Given a sql string and a map of paging options, return a modified SQL string
   that contains the necessary LIMIT/OFFSET/ORDER BY clauses.  The map of paging

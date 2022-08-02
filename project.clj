@@ -204,6 +204,7 @@
                  ;; Database connectivity
                  [com.zaxxer/HikariCP]
                  [honeysql]
+                 [com.github.seancorfield/honeysql "2.2.891"]
 
                  ;; WebAPI support libraries.
                  [bidi]
