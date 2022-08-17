@@ -359,10 +359,10 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Node data expiration
 
-(pls/defn-validated set-certname-facts-expiration
+(pls/defn-validated set-certname-facts-expiration :- processing-status-schema
   [certname :- s/Str
    expire? :- s/Bool
-   updated :- pls/Timestamp] :- processing-status-schema
+   updated :- pls/Timestamp]
   (let [updated (to-timestamp updated)]
     (jdbc/do-prepared
      (str "insert into certname_fact_expiration as cfe (certid, expire, updated)"
@@ -868,12 +868,12 @@
            (add-catalog-metadata! hash catalog received-timestamp)
            (update-catalog-associations! certname-id catalog refs-to-hashes))))
 
-(s/defn replace-catalog!
+(s/defn replace-catalog! :- catalog-schema
   "Persist the supplied catalog in the database, returning its
    similarity hash."
   ([catalog :- catalog-schema]
    (replace-catalog! catalog (now)))
-  ([{:keys [producer_timestamp resources certname] :as catalog} :- catalog-schema
+  ([{:keys [producer_timestamp resources certname] :as catalog}
     received-timestamp :- pls/Timestamp] :- processing-status-schema
    (time! (get-storage-metric :replace-catalog)
           (jdbc/with-db-transaction []
@@ -947,11 +947,11 @@
       (.update digest (byte 0)))
     (.digest digest)))
 
-(pls/defn-validated replace-catalog-inputs!
+(pls/defn-validated replace-catalog-inputs! :- processing-status-schema
   [certname :- s/Str
    catalog_uuid :- s/Str
    inputs :- [[s/Str]]
-   updated :- pls/Timestamp] :- processing-status-schema
+   updated :- pls/Timestamp]
   (jdbc/with-db-transaction []
     (let [updated (to-timestamp updated)
           catalog-uuid (sutils/munge-uuid-for-storage catalog_uuid)
@@ -1412,7 +1412,7 @@
      (filter #(resource-event-expired? (:timestamp %) resource-events-ttl) resource-list)
    resource-list))
 
-(s/defn add-report!*
+(s/defn add-report!* :- processing-status-schema
   "Helper function for adding a report.  Accepts an extra parameter, `update-latest-report?`, which
   is used to determine whether or not the `update-latest-report!` function will be called as part of
   the transaction.  This should always be set to `true`, except during some very specific testing
@@ -1421,7 +1421,7 @@
    received-timestamp :- pls/WireTimestamp
    update-latest-report? :- s/Bool
    save-event? :- s/Bool
-   options-config] :- processing-status-schema
+   options-config]
   (time! (get-storage-metric :store-report)
          (let [{:keys [puppet_version certname report_format configuration_version producer
                        producer_timestamp start_time end_time transaction_uuid environment
@@ -1796,14 +1796,13 @@
           expired-ts
           stale-start-ts stale-start-ts stale-start-ts stale-start-ts stale-start-ts))))
 
-(pls/defn-validated replace-facts!
+(pls/defn-validated replace-facts! :- processing-status-schema
   "Updates the facts of an existing node, if the facts are newer than the current set of facts.
    Adds all new facts if no existing facts are found. Invoking this function under the umbrella of
    a repeatable read or serializable transaction enforces only one update to the facts of a certname
    can happen at a time.  The first to start the transaction wins.  Subsequent transactions will fail
    as the factsets will have changed while the transaction was in-flight."
   [{:keys [certname producer_timestamp] :as fact-data} :- facts-schema]
-  :- processing-status-schema
   (time! (get-storage-metric :replace-facts)
          (if-let [local-factset-producer-ts (timestamp-of-newest-record :factsets certname)]
            (if-not (.after local-factset-producer-ts (to-timestamp producer_timestamp))
@@ -1811,7 +1810,7 @@
              {:status :stale})
            (add-facts! fact-data))))
 
-(s/defn add-report!
+(s/defn add-report! :- processing-status-schema
   "Add a report and all of the associated events to the database."
   ([report received-timestamp db conn-status]
    (add-report! report received-timestamp db conn-status true))
@@ -1821,7 +1820,7 @@
    received-timestamp :- pls/Timestamp
    db conn-status
    update-latest-report?
-   options-config] :- processing-status-schema
+   options-config]
   (let [producer-timestamp (to-timestamp producer_timestamp)
         resource-events-ttl (get options-config :resource-events-ttl)
         save-event (if (nil? resource-events-ttl)
