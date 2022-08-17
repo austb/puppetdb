@@ -289,8 +289,7 @@
                                    command-kw certname producer-ts status nil))
   ([id received-time start-time command-kw certname producer-ts
     {:keys [status hash] :as _status}
-    {:keys [obsolete-cmd? puppet-version] :as _opts}]
-   ;; REVIEW: could these changes print more messages than before (that we don't want)?
+    {:keys [puppet-version] :as _opts}]
    ;; manually stringify these to avoid locale-specific formatting
    (let [id (str id)
          received-time (str (time/to-long received-time))
@@ -303,33 +302,23 @@
                                   hash)]
                          (str " (" (subs hs 0 8)")"))
                        "")]
-     (assert (not (and status obsolete-cmd?)))
      (cond
        puppet-version
        (case status
          :incorporated
          (log/info (trs "[{0}] [{1} ms] ''{2}'' puppet v{3} command{4} processed for {5}"
                         summary duration command-name puppet-version hash-prefix certname))
-         :stale
-         (log/info (trs "[{0}] [{1} ms] ''{2}'' puppet v{3} command{4} ignored (stale) for {5}"
-                        summary duration command-name puppet-version hash-prefix certname))
-         :duplicate
-         (log/info (trs "[{0}] [{1} ms] ''{2}'' puppet v{3} command{4} ignored (duplicate) for {5}"
-                        summary duration command-name puppet-version hash-prefix certname)))
-       obsolete-cmd?
-       (log/info (trs "[{0}] [{1} ms] ''{2}'' command{3} ignored (obsolete) for {4}"
-                      summary duration command-name hash-prefix certname))
+         (:stale :duplicate :obsolete)
+         (log/info (trs "[{0}] [{1} ms] ''{2}'' puppet v{3} command{4} ignored ({5}) for {6}"
+                        summary duration command-name puppet-version hash-prefix (name status) certname)))
        :else
        (case status
          :incorporated
          (log/info (trs "[{0}] [{1} ms] ''{2}'' command{3} processed for {4}"
                         summary duration command-name hash-prefix certname))
-         :stale
-         (log/info (trs "[{0}] [{1} ms] ''{2}'' command{3} ignored (stale) for {4}"
-                        summary duration command-name hash-prefix certname))
-         :duplicate
-         (log/info (trs "[{0}] [{1} ms] ''{2}'' command{3} ignored (duplicate) for {4}"
-                        summary duration command-name hash-prefix certname)))))))
+         (:stale :duplicate :obsolete)
+         (log/info (trs "[{0}] [{1} ms] ''{2}'' command{3} ignored ({4}) for {5}"
+                        summary duration command-name hash-prefix (name status) certname)))))))
 
 ;; Catalog replacement
 
@@ -645,8 +634,7 @@
   ((:callback cmd) {:command cmd :result nil})
   (async/>!! response-chan (make-cmd-processed-message cmd nil))
   (log-command-processed-messsage id received (now) (command-keys command)
-                                  certname producer_timestamp nil
-                                  {:obsolete-cmd? true})
+                                  certname producer_timestamp {:status :obsolete})
   (queue/ack-command q {:entry (queue/cmdref->entry cmdref)})
   (maybe-send-cmd-event! cmdref ::processed)
   (update-counter! :depth command version dec!)
