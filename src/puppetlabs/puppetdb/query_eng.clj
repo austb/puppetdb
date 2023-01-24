@@ -100,6 +100,23 @@
          :when (:queryable? projection-value)]
      (keyword projection-key))))
 
+;; TODO use this fn in real code
+(defn get-query-rec
+  [entity options]
+  (cond
+   ;; Move this so that we always look for
+   ;; include_facts_expiration (PDB-4586).
+   (and (:include_facts_expiration options)
+        (= entity :nodes))
+   (get-in @entity-fn-idx [:nodes-with-fact-expiration :rec])
+
+   (and (:include_package_inventory options)
+        (= entity :factsets))
+   (get-in @entity-fn-idx [:factsets-with-packages :rec])
+
+   :else
+   (get-in @entity-fn-idx [entity :rec])) )
+
 (defn- regular-query->sql
   [query entity options]
   (let [query-rec (cond
