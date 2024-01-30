@@ -989,6 +989,18 @@
     (not catalogs) (dissoc :catalog)
     (not reports) (dissoc :report)))
 
+(def log-falling-behind-message
+  (let [missed-deadlines (atom 0)
+        last-log-message (atom (time/ephemeral-now-ns))]
+    (fn [_host-state]
+      (let [now (time/ephemeral-now-ns)]
+        (if (> 5000000000 (- now @last-log-message))
+          (swap! missed-deadlines inc)
+          (do
+            (println-err (format "Simulation thread missed deadline for %d commands" @missed-deadlines))
+            (reset! missed-deadlines 0)
+            (reset! last-log-message (time/ephemeral-now-ns))))))))
+
 (defn start-simulation-loop
   "Run a background process which takes host-state maps from read-ch, updates
   them with update-host, and puts them on write-ch. If num-msgs is not given,
@@ -1025,10 +1037,15 @@
                       (-> host-path-or-info Files/readAllBytes nippy/thaw)])
                    new-state (update-host host-state include-edges? rand-perc progressing-timestamp-fn)]
                (write-host-info new-state host-path)
-               (when (and (not num-msgs) (> deadline (time/ephemeral-now-ns)))
-                 (async/alt!!
-                   stop-ch (doseq [c [read-ch sim-ch host-info-ch]] (async/close! c))
-                   (async/timeout (int (/  (- deadline (time/ephemeral-now-ns)) 1000000))) nil))
+               (when-not num-msgs
+                 (if (> deadline (time/ephemeral-now-ns))
+                   (async/alt!!
+                    stop-ch (doseq [c [read-ch sim-ch host-info-ch]] (async/close! c))
+                    (async/timeout (int (/  (- deadline (time/ephemeral-now-ns)) 1000000))) nil)
+                   ;; In run-interval mode it is critical that this simulation loop is able to produce commands
+                   ;; within the deadline, otherwise they will not arrive quicklly enough at the sending threads
+                   ;; and benchmark will not produce the proper rate
+                   (log-falling-behind-message host-state)))
                (assoc (prune-host-info new-state facts catalogs reports)
                       :host-path host-path))))
       read-ch)]))
