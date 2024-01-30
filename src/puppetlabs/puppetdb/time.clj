@@ -347,3 +347,9 @@
   of each other will be correct."
   []
   (System/nanoTime))
+
+(def seconds->ns (partial * 1000000000))
+(defn ns->seconds [ns] (/ ns 1000000000))
+
+(def ms->ns (partial * 1000000))
+(defn ns->ms [ns] (/ ns 1000000))

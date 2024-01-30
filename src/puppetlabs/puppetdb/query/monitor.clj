@@ -85,7 +85,7 @@
    [puppetlabs.i18n.core :refer [trs]]
    [puppetlabs.puppetdb.jdbc :as jdbc]
    [puppetlabs.puppetdb.scf.storage-utils :refer [db-metadata]]
-   [puppetlabs.puppetdb.time :refer [ephemeral-now-ns]]
+   [puppetlabs.puppetdb.time :refer [ephemeral-now-ns] :as t]
    [puppetlabs.puppetdb.utils :refer [with-noisy-failure]]
    [schema.core :as s])
   (:import
@@ -102,15 +102,13 @@
 (def ^:private warn-on-reflection-orig *warn-on-reflection*)
 (set! *warn-on-reflection* true)
 
-(def ns-per-ms 1000000)
-
 (defn state-summary [{:keys [deadlines selector-keys]}]
   {:selectors (keys selector-keys)
    :deadlines (->> deadlines vals
                    (map #(select-keys % [:query-id :deadline-ns :pg-pid :terminated]))
                    (map #(assoc % :remaining-sec
                                 (-> (- (:deadline-ns %) (ephemeral-now-ns))
-                                    (/ 1000000000)
+                                    (t/ns->seconds)
                                     double))))})
 
 (defn- terminate-query
@@ -269,8 +267,7 @@
   (cond
     (= ##Inf deadline-ns) 0 ;; block select forever
     (= ##-Inf deadline-ns) 1 ;; expired; unblock select as fast as we can
-    :else (max 1 (int (/ (- deadline-ns (ephemeral-now-ns))
-                         ns-per-ms)))))
+    :else (max 1 (int (t/ns->ms (- deadline-ns (ephemeral-now-ns)))))))
 
 (defn- monitor-queries [{:keys [exit queries ^Selector selector] :as _monitor}
                         terminate-query]

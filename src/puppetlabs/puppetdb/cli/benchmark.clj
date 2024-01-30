@@ -890,7 +890,7 @@
                     (int (/ cmd-per-sec expected-node-message-rate))
                     (time/in-minutes run-interval)
                     (format "%.2f" query-per-sec)
-                    (format "%.2f" (-> metrics :query-duration timers/mean (/ 1000000000)))
+                    (format "%.2f" (-> metrics :query-duration timers/mean time/ns->seconds))
                     errors))
               (recur 0 0 0 t))
             (recur cmds queries errors last-report-time)))))))
@@ -994,7 +994,7 @@
         last-log-message (atom (time/ephemeral-now-ns))]
     (fn [_host-state]
       (let [now (time/ephemeral-now-ns)]
-        (if (> 5000000000 (- now @last-log-message))
+        (if (> (time/seconds->ns 5) (- now @last-log-message))
           (swap! missed-deadlines inc)
           (do
             (println-err (format "Simulation thread missed deadline for %d commands" @missed-deadlines))
@@ -1028,7 +1028,7 @@
       ;; commands after the sleep that have timestamps that were
       ;; chosen in the last iteration.
       (map (fn advance-host [host-path-or-info]
-             (let [deadline (+ (time/ephemeral-now-ns) (* ms-per-thread 1000000))
+             (let [deadline (+ (time/ephemeral-now-ns) (time/ms->ns ms-per-thread))
                    [host-path host-state]
                    (if (map? host-path-or-info)
                      [(-> host-path-or-info :host (host->host-path storage-dir))
@@ -1041,7 +1041,7 @@
                  (if (> deadline (time/ephemeral-now-ns))
                    (async/alt!!
                     stop-ch (doseq [c [read-ch sim-ch host-info-ch]] (async/close! c))
-                    (async/timeout (int (/  (- deadline (time/ephemeral-now-ns)) 1000000))) nil)
+                    (async/timeout (int (time/ns->ms (- deadline (time/ephemeral-now-ns))))) nil)
                    ;; In run-interval mode it is critical that this simulation loop is able to produce commands
                    ;; within the deadline, otherwise they will not arrive quicklly enough at the sending threads
                    ;; and benchmark will not produce the proper rate

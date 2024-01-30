@@ -25,7 +25,7 @@
                                                       parse-order-by
                                                       parse-order-by-json]]
             [puppetlabs.puppetdb.pql :as pql]
-            [puppetlabs.puppetdb.time :refer [ephemeral-now-ns to-timestamp]]
+            [puppetlabs.puppetdb.time :refer [ephemeral-now-ns to-timestamp] :as t]
             [puppetlabs.puppetdb.utils :refer [response->channel update-when]]
             [puppetlabs.puppetdb.utils.string-formatter :refer [pprint-json-parse-exception]])
   (:import
@@ -333,7 +333,7 @@
     (log/info (trs "Parsing PDBQuery:{0}:{1}" query-uuid (pr-str query))))
   (let [start (System/nanoTime)
         result (pql/parse-pql-query query)
-        elapsed (/ (- (System/nanoTime) start) 1000000.0)
+        elapsed (t/ns->ms (- (System/nanoTime) start))
         max-pql-limit 1000]
     (when (> elapsed max-pql-limit)
       (log/warn (trs "Parsing PQL took {0} ms for PDBQuery:{1}:{2}" elapsed query-uuid (pr-str query))))
@@ -419,11 +419,11 @@
                      timeout (or sync-timeout
                                  (min (:timeout query-map query-timeout-default)
                                       query-timeout-max))
-                     deadline (+ start-ns (* timeout 1000000000))
+                     deadline (+ start-ns (t/seconds->ns timeout))
                      ;; Wait one extra second for time-limited-seq and
                      ;; statement timeouts since the monitor kills the
                      ;; entire pg worker.
-                     monitor-deadline (+ deadline 1000000000)
+                     monitor-deadline (+ deadline (t/seconds->ns 1))
 
                      ;; May have no response because some tests (e.g. some
                      ;; with-http-app based tests) don't add one right now.
