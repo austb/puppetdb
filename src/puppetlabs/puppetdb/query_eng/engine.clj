@@ -26,6 +26,15 @@
    (clojure.lang ExceptionInfo)
    [org.postgresql.util PGobject]))
 
+(defn spy>> [tag x]
+  (binding [*out* *err*]
+    (clojure.pprint/pprint [tag x]))
+  x)
+
+(defn spy> [x tag]
+  (binding [*out* *err*]
+    (clojure.pprint/pprint [tag x]))
+  x)
 ;; Queries must opt-in to the drop-joins optimization, and even then,
 ;; it's not yet necessarily safe if the query has top-level
 ;; aggregates.  Before opting in, we should feel confident that
@@ -1583,6 +1592,8 @@
                                [field (quote-projections name)]))
                        (into calls)))))
 
+(declare create-json-subtree-projection)
+
 (defn fn-binary-expression->hsql
   "Produce a predicate that compares the result of a function against a
   provided value. The operator, function name and its arguments must
@@ -1590,7 +1601,8 @@
   [op function args]
   (let [args
         (case function
-          ("sum" "avg" "min" "max" "count" "jsonb_typeof") (map keyword args)
+          ("sum" "avg" "min" "max" "count") (map keyword args)
+          "jsonb_typeof" args
           "to_char" [(-> args first keyword) [:inline (second args)]]
           (throw (bad-query-ex (tru "{0} is not a valid function"
                                                  (pr-str function)))))]
@@ -2474,6 +2486,10 @@
     (throw (bad-query-ex (tru "field {0} is not a valid queryable field"
                                            (pr-str maybe-field))))))
 
+;; TODO: rearrange to remove this
+;; TODO: functions MUST be updated to support jsonb extracts
+(declare validate-query-operation-fields)
+
 ;; TODO we should reuse validate-query-operation-fields (defined below) here. Don't allow
 ;; any json-extracts, functions do not support them currently
 (defn validate-fn-binary-expr
@@ -2485,7 +2501,12 @@
       ("sum" "avg" "min" "max")
       (do
         (validate-argument-count f args #{1})
-        (validate-queryable-field query-rec maybe-field)
+        (validate-query-operation-fields
+          maybe-field
+          (queryable-fields query-rec)
+          (projectable-json-fields query-rec)
+          (:alias query-rec)
+          "Can't extract" "")
         ;; TODO Is this numeric guard too strict?  AST docs suggest maybe not.
         ;; TODO add a test, no tests failed when 'numeric' was misspelled
         (when (not= :numeric (get-in query-rec [:projections maybe-field :type]))
@@ -2510,7 +2531,12 @@
       "jsonb_typeof"
       (do
         (validate-argument-count f args #{1})
-        (validate-queryable-field query-rec maybe-field))
+        (validate-query-operation-fields
+          maybe-field
+          (queryable-fields query-rec)
+          (projectable-json-fields query-rec)
+          (:alias query-rec)
+          "Can't extract" ""))
 
       (throw (bad-query-ex (tru "{0} is not a valid function"
                                              (pr-str f)))))))
@@ -2519,6 +2545,14 @@
   "Create a query plan for `node` in the context of the given query (as `query-rec`)"
   [query-rec node]
   (cm/match [node]
+            [[(op :guard #{"=" "~" ">" "<" "<=" ">="}) ["function" "jsonb_typeof" field] value]]
+            (do
+              (validate-fn-binary-expr query-rec "jsonb_typeof" (spy>> :field [field]))
+              (map->FnBinaryExpression {:operator op
+                                        :function "jsonb_typeof"
+                                        ;; TODO use create-json-path-extraction directly, this is not a projection
+                                        :args (spy>> :fn-args [(:field (create-json-subtree-projection (parse/parse-field field) (:projections query-rec)))])
+                                        :value value}))
             ;; operator-function-clause
             [[(op :guard #{"=" "~" ">" "<" "<=" ">="}) ["function" f & args] value]]
             (do
